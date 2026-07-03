@@ -102,12 +102,13 @@ def main():
     t = {k: v[0] for k, v in d.items()}  # medianas
     base = t[("v0", 1)]
 
-    versions = [("v0", 1), ("v1", 1), ("v3", 8), ("v2", 8)]
+    versions = [("v0", 1), ("v1", 1), ("v3", 8), ("v2", 8), ("v4", 8)]
     labels = [
         "v0\nbaseline ijk\nsequencial",
         "v1\n+ omp simd\n(laço interno)",
         "v3\nparallel for interno\n8 threads",
         "v2\nparallel for externo\n8 threads",
+        "v4\nikj + parallel for\n8 threads",
     ]
 
     # 1. tempo por versao
@@ -115,8 +116,9 @@ def main():
     bar_chart(
         "tempo_por_versao.png",
         "Tempo de execução por versão",
-        "Matmul N=1024, dupla precisão — mediana de 5 repetições (desvio < 3%) — menor é melhor",
-        labels, times, [fmt(v, 2, " s") for v in times],
+        "Matmul N=1024, dupla precisão — mediana de 5 repetições — menor é melhor",
+        labels, times,
+        [fmt(v, 3 if v < 0.1 else 2, " s") for v in times],
         "Tempo (s)", max(times) * 1.18,
     )
 
@@ -126,7 +128,8 @@ def main():
         "speedup_por_versao.png",
         "Speedup por versão (vs. baseline v0)",
         "Matmul N=1024 — maior é melhor; linha tracejada marca o baseline (1×)",
-        labels, sp, [fmt(v, 2, "×") for v in sp],
+        labels, sp,
+        [fmt(v, 0 if v >= 100 else (1 if v >= 10 else 2), "×") for v in sp],
         "Speedup", max(sp) * 1.18,
         ref_line=1.0,
     )

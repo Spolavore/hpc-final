@@ -1,6 +1,6 @@
 # Trabalho Final — Software de Alto Desempenho (INF01094)
 
-**Otimização de multiplicação de matrizes densas em CPU com OpenMP: uma investigação sobre vetorização, granularidade de paralelismo e escalabilidade**
+**Otimização de multiplicação de matrizes densas em CPU com OpenMP: uma investigação sobre vetorização, granularidade de paralelismo, escalabilidade e padrão de acesso à memória**
 
 ---
 
@@ -28,25 +28,26 @@ for (int i = 0; i < n; i++)
 
 ### Metodologia de medição
 
-- **1 execução de warm-up não medida** (toca as páginas de memória e aquece as caches), seguida de **5 repetições medidas** com `omp_get_wtime()`; reporta-se a **mediana** e o desvio-padrão (< 3 % em todas as configurações).
+- **1 execução de warm-up não medida** (toca as páginas de memória e aquece as caches), seguida de **5 repetições medidas** com `omp_get_wtime()`; reporta-se a **mediana** e o desvio-padrão (< 2 % em todas as configurações).
 - Threads fixadas nos cores físicos com `OMP_PROC_BIND=close` e `OMP_PLACES=cores`.
 - O governor de frequência da máquina é `powersave`. Para descartar interferência de DVFS, a frequência foi **amostrada continuamente** durante as execuções: o core solo sustenta ~4,96 GHz (média de 52 amostras; mín. 3,50, máx. 5,04) e as execuções com 8 threads sustentam ~4,8 GHz all-core (ver `results/controles.txt`).
 - Matrizes inicializadas com gerador determinístico (LCG com semente fixa): todas as versões operam sobre exatamente os mesmos dados.
 
-**Baseline medido: 3,952 s (mediana de 5 repetições, σ = 0,004 s) → 0,543 GFLOP/s.**
+**Baseline medido: 3,950 s (mediana de 5 repetições, σ = 0,005 s) → 0,544 GFLOP/s.**
 
 ### Validação de corretude
 
-Cada versão otimizada é comparada elemento a elemento com o resultado da v0 sobre as mesmas entradas (`./matmul --check`). As três versões produziram **diferença máxima absoluta e relativa igual a zero** em N = 1024 (`results/validacao.txt`).
+Cada versão otimizada é comparada elemento a elemento com o resultado da v0 sobre as mesmas entradas (`./matmul --check`). As quatro versões produziram **diferença máxima absoluta e relativa igual a zero** em N = 1024 (`results/validacao.txt`).
 
 ## 3. Diagnóstico do gargalo
 
-Um núcleo Zen 4 a ~4,9 GHz executando FMA vetorial tem pico teórico de ~76,8 GFLOP/s (o chip inteiro, ~614 GFLOP/s). A v0 atinge **0,543 GFLOP/s — menos de 1 % do pico de um único core** — logo o gargalo não é capacidade de cômputo.
+Um núcleo Zen 4 a ~4,9 GHz executando FMA vetorial tem pico teórico de ~76,8 GFLOP/s (o chip inteiro, ~614 GFLOP/s). A v0 atinge **0,544 GFLOP/s — menos de 1 % do pico de um único core** — logo o gargalo não é capacidade de cômputo.
 
-O laço interno percorre `B[k*n + j]` com **stride de N elementos (8 KiB)**: cada iteração toca uma linha de cache diferente, de uma região de 8 MiB que não cabe na L2 (1 MiB). A latência de acesso domina o tempo (≈ 18 ciclos por iteração a 4,96 GHz), caracterizando um kernel **memory-latency-bound** por padrão de acesso — o sintoma "tempo dominado por memória / acessos com stride" do mapa de decisão da disciplina. Duas hipóteses de intervenção foram formuladas:
+O laço interno percorre `B[k*n + j]` com **stride de N elementos (8 KiB)**: cada iteração toca uma linha de cache diferente, de uma região de 8 MiB que não cabe na L2 (1 MiB), e usa apenas 1 dos 8 doubles da linha trazida. A latência de acesso domina o tempo (≈ 18 ciclos por iteração a 4,96 GHz), caracterizando um kernel **memory-latency-bound** por padrão de acesso — o sintoma "tempo dominado por memória / acessos com stride" do mapa de decisão da disciplina. As hipóteses de intervenção formuladas:
 
 - **H1 (falsa):** o laço interno é um produto escalar; pedir vetorização explícita (`omp simd`) aproveitaria as unidades AVX-512 e reduziria o tempo.
 - **H2 (verdadeira):** o laço externo tem 1024 iterações independentes; distribuí-las entre os 8 cores com granularidade grossa multiplica o throughput agregado de acesso à memória e o cômputo.
+- **H3 (verdadeira, segunda iteração do ciclo):** enquanto o acesso a `B` tiver stride, nem SIMD nem threads chegam perto do pico; **trocar a ordem dos laços** para tornar o acesso unit-stride ataca a causa raiz.
 
 ## 4. Otimizações
 
@@ -71,7 +72,7 @@ for (int i = 0; i < n; i++)
     ...  /* corpo idêntico ao da v0 */
 ```
 
-*Hipótese:* granularidade grossa — uma única região paralela; cada thread recebe N/p linhas de `C` (trabalho de ~N³/p operações) sem nenhuma sincronização interna. O corpo do laço é **idêntico ao da v0**, isolando o efeito da paralelização (confirmado: v2 com 1 thread = 3,972 s ≈ v0).
+*Hipótese:* granularidade grossa — uma única região paralela; cada thread recebe N/p linhas de `C` (trabalho de ~N³/p operações) sem nenhuma sincronização interna. O corpo do laço é **idêntico ao da v0**, isolando o efeito da paralelização (confirmado: v2 com 1 thread = 3,943 s ≈ v0).
 
 ### v3 — experimento de granularidade: `omp parallel for` no laço interno
 
@@ -82,19 +83,37 @@ for (int k = 0; k < n; k++) ...
 
 Versão de controle para quantificar o custo da granularidade errada: a região paralela é criada **N² ≈ 1 milhão de vezes**, cada uma distribuindo apenas 1024 multiplicações e terminando em reduction + barreira.
 
+### v4 — troca de laços i-k-j + `omp parallel for` (segunda iteração do ciclo)
+
+```c
+#pragma omp parallel for schedule(static)
+for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) C[i*n + j] = 0.0;
+    for (int k = 0; k < n; k++) {
+        const double a = A[i*n + k];
+        for (int j = 0; j < n; j++)
+            C[i*n + j] += a * B[k*n + j];
+    }
+}
+```
+
+Após a v2, o ciclo de otimização volta ao diagnóstico: o tempo caiu 12×, mas o throughput (6,7 GFLOP/s) segue em ~1 % do pico do chip — o gargalo de padrão de acesso continua lá, agora replicado em 8 cores. A v4 troca a ordem dos laços para **i-k-j**: o laço interno passa a percorrer `B` e `C` com **stride 1**. O compilador vetoriza com vetores de 64 bytes usando cargas contíguas (`-fopt-info-vec`), o prefetcher de hardware trabalha com fluxo sequencial e cada linha de cache é aproveitada por inteiro (8 doubles em vez de 1). Para cada elemento `C[i][j]` as contribuições continuam sendo somadas em ordem crescente de `k`, então o resultado permanece **bit a bit idêntico** ao da v0.
+
 ## 5. Resultados
 
 | Versão | Configuração | Tempo (mediana ± σ) | Speedup vs. v0 | GFLOP/s | Eficiência |
 |---|---|---|---|---|---|
-| v0 | sequencial | 3,952 s ± 0,004 | 1,00× | 0,543 | — |
-| v1 | `omp simd`, sequencial | 3,962 s ± 0,005 | **1,00×** | 0,542 | — |
-| v3 | paralelo interno, 8 threads | 2,107 s ± 0,054 | 1,88× | 1,019 | 23 % |
-| v2 | paralelo externo, 1 thread | 3,972 s ± 0,010 | 1,00× | 0,541 | 100 % |
-| v2 | paralelo externo, 2 threads | 1,194 s ± 0,008 | 3,31× | 1,799 | 166 % |
-| v2 | paralelo externo, 4 threads | 0,630 s ± 0,003 | 6,27× | 3,409 | 158 % |
-| v2 | paralelo externo, 8 threads | **0,341 s ± 0,014** | **11,60×** | 6,302 | 146 % |
+| v0 | sequencial | 3,950 s ± 0,005 | 1,00× | 0,54 | — |
+| v1 | `omp simd`, sequencial | 3,886 s ± 0,005 | **1,02×** | 0,55 | — |
+| v3 | paralelo interno, 8 threads | 1,793 s ± 0,032 | 2,20× | 1,20 | 28 % |
+| v2 | paralelo externo, 1 thread | 3,943 s ± 0,011 | 1,00× | 0,54 | 100 % |
+| v2 | paralelo externo, 2 threads | 1,222 s ± 0,007 | 3,23× | 1,76 | 161 % |
+| v2 | paralelo externo, 4 threads | 0,625 s ± 0,001 | 6,32× | 3,44 | 158 % |
+| v2 | paralelo externo, 8 threads | 0,320 s ± 0,005 | 12,33× | 6,70 | 154 % |
+| v4 | i-k-j + paralelo externo, 1 thread | 0,0850 s ± 0,0010 | 46,5× | 25,3 | — |
+| v4 | i-k-j + paralelo externo, 8 threads | **0,0124 s ± 0,0001** | **319×** | **173,5** | 86 % |
 
-(Eficiência paralela = speedup(p)/p; para a v2, relativa à v2 com 1 thread.)
+(Eficiência paralela = speedup(p)/p, relativa à mesma versão com 1 thread.)
 
 ![Tempo por versão](results/tempo_por_versao.png)
 
@@ -106,25 +125,27 @@ Versão de controle para quantificar o custo da granularidade errada: a região 
 
 ## 6. Discussão
 
-**Por que a v1 não melhorou.** A hipótese H1 falhou porque tratou o kernel como compute-bound. A vetorização aconteceu de fato (vetores de 64 bytes confirmados pelo compilador), mas SIMD só multiplica a taxa de *cômputo* — e o tempo da v0 é gasto esperando linhas de cache do acesso com stride a `B`. Montar o vetor com 8 cargas escalares custa o mesmo tráfego de memória que o código escalar, e o resultado é 0,997× (empate estatístico). É o caso previsto no material da disciplina: *uma técnica conhecida só é uma boa otimização quando resolve o gargalo dominante* — aqui, o gargalo é o padrão de acesso, não a falta de instruções vetoriais.
+**Por que a v1 não melhorou.** A hipótese H1 falhou porque tratou o kernel como compute-bound. A vetorização aconteceu de fato (vetores de 64 bytes confirmados pelo compilador), mas SIMD só multiplica a taxa de *cômputo* — e o tempo da v0 é gasto esperando linhas de cache do acesso com stride a `B`. Montar o vetor com 8 cargas escalares custa o mesmo tráfego de memória que o código escalar, e o resultado é um empate estatístico (1,02×; a variação entre execuções completas do benchmark é da mesma ordem, ±2 %). É o caso previsto no material da disciplina: *uma técnica conhecida só é uma boa otimização quando resolve o gargalo dominante* — aqui, o gargalo é o padrão de acesso, não a falta de instruções vetoriais.
 
-**Por que a v3 ficou no meio do caminho.** Paralelizar o laço errado rendeu 1,88× com 8 cores — ganho positivo, porém com **eficiência de 23 %**: 77 % da capacidade contratada é desperdiçada criando ~1 milhão de regiões paralelas, cada uma com reduction e barreira. O ganho só não é pior porque a libgomp usa espera ativa (busy-wait), que barateia o fork/join, e porque 8 threads acessando `B` em paralelo escondem parte da latência de memória. O resultado confirma a lição da Família 7: *o overhead de paralelizar pode ser da ordem do ganho* quando a granularidade é fina — mesmo quando não chega a piorar o tempo, destrói a eficiência.
+**Por que a v3 ficou no meio do caminho.** Paralelizar o laço errado rendeu 2,20× com 8 cores — ganho positivo, porém com **eficiência de 28 %**: quase três quartos da capacidade contratada são desperdiçados criando ~1 milhão de regiões paralelas, cada uma com reduction e barreira. O ganho só não é pior porque a libgomp usa espera ativa (busy-wait), que barateia o fork/join, e porque 8 threads acessando `B` em paralelo escondem parte da latência de memória. A v3 é também a versão de maior variabilidade entre execuções (σ e deriva entre benchmarks completos visivelmente maiores) — sincronização fina torna o tempo sensível a ruído do sistema. O resultado confirma a lição da Família 7: *o overhead de paralelizar pode ser da ordem do ganho* quando a granularidade é fina — mesmo quando não chega a piorar o tempo, destrói a eficiência.
 
-**Por que a v2 escala — e o speedup superlinear.** Com granularidade grossa, o escalonamento incremental é quase linear (2→4 threads: 95 %; 4→8: 93 %), e 8 threads entregam 11,60×. Speedup acima de p (eficiência > 100 %) é anômalo, e foi investigado com três experimentos de controle (`results/controles.txt`):
+**Por que a v2 escala — e o speedup superlinear.** Com granularidade grossa, o escalonamento incremental é quase linear (2→4 threads: 98 %; 4→8: 97 %), e 8 threads entregam 12,33×. Speedup acima de p (eficiência > 100 %) é anômalo, e foi investigado com três experimentos de controle (`results/controles.txt`):
 
 1. **Não é DVFS:** a frequência sustentada do core solo (~4,96 GHz) é *maior* que a all-core (~4,8 GHz); o efeito vai na direção contrária.
-2. **Não é code-gen:** v2 com 1 thread empata com a v0 (3,972 s vs. 3,952 s) — o corpo compilado é equivalente.
+2. **Não é code-gen:** v2 com 1 thread empata com a v0 (3,943 s vs. 3,950 s) — o corpo compilado é equivalente.
 3. **Não é co-execução em si:** dois *processos* v0 independentes, com matrizes privadas, rodando simultaneamente em cores distintos mantêm ~3,9 s cada — o throughput por core não muda quando os dados **não** são compartilhados.
 
-A explicação restante — consistente com os três controles, embora sua confirmação definitiva exigisse contadores de hardware (indisponíveis sem root nesta máquina, `perf_event_paranoid=4`) — é o **reuso da matriz compartilhada `B` através da hierarquia de cache**: na v2 todas as threads percorrem as mesmas colunas de `B` aproximadamente em fase, e o custo de trazer cada linha de cache de `B` para perto dos cores (L3 victim cache do Zen 4, 96 MiB) é pago uma vez e aproveitado por todas — enquanto a thread única da v0 paga esse custo sozinha, iteração após iteração. O throughput *por core* sobe de ~18 para ~11–12 ciclos por iteração assim que há 2 ou mais threads cooperando sobre a mesma `B`.
+A explicação restante — consistente com os três controles, embora sua confirmação definitiva exigisse contadores de hardware (indisponíveis sem root nesta máquina, `perf_event_paranoid=4`) — é o **reuso da matriz compartilhada `B` através da hierarquia de cache**: na v2 todas as threads percorrem as mesmas colunas de `B` aproximadamente em fase, e o custo de trazer cada linha de cache de `B` para perto dos cores (L3 victim cache do Zen 4, 96 MiB) é pago uma vez e aproveitado por todas — enquanto a thread única da v0 paga esse custo sozinha, iteração após iteração. O throughput *por core* sobe de ~18 para ~11 ciclos por iteração assim que há 2 ou mais threads cooperando sobre a mesma `B`.
 
-**Limitações.** (i) Sem acesso a `perf`/RAPL, o diagnóstico fino (misses por nível de cache, IPC, energia/EDP) não pôde ser medido — as conclusões microarquiteturais acima estão explicitamente marcadas como hipótese controlada por experimentos. (ii) Mesmo a v2 usa ~1 % do pico do chip: o próximo gargalo continua sendo o stride sobre `B`; troca de laços (ikj), tiling para cache e vetorização com acesso unitário seriam os próximos passos naturais e devem compor com o paralelismo da v2. (iii) Resultados obtidos com governor `powersave`; a frequência foi monitorada, mas um governor `performance` reduziria ainda mais a variância.
+**Por que a v4 destrava o hardware — e fecha a prova do diagnóstico.** A v4 ataca a causa raiz que o diagnóstico apontou desde o início: com acesso unit-stride, a *mesma* vetorização que não rendeu nada na v1 passa a render — 46,5× com **uma única thread** (25,3 GFLOP/s) — porque agora cada instrução vetorial consome uma linha de cache inteira e o prefetcher alimenta o pipeline. O par v1/v4 é a demonstração experimental da tese do trabalho: as mesmas unidades SIMD, no mesmo laço, rendem 1,02× quando o padrão de acesso não é corrigido e 46× quando é. Combinada com o paralelismo da v2, a v4 chega a **319× (173,5 GFLOP/s, ~28 % do pico do chip)**. Sua escalabilidade de 1→8 threads é de 6,85× (86 % de eficiência), **sublinear e sem a anomalia da v2**: com acesso sequencial, cada thread já usa a memória eficientemente sozinha, o reuso de `B` via L3 deixa de ser o fator dominante e a banda agregada da hierarquia passa a ser o teto — o comportamento clássico previsto para códigos memory-bound bem otimizados.
+
+**Limitações.** (i) Sem acesso a `perf`/RAPL, o diagnóstico fino (misses por nível de cache, IPC, energia/EDP) não pôde ser medido — as conclusões microarquiteturais acima estão explicitamente marcadas como hipótese controlada por experimentos. (ii) A v4 usa ~28 % do pico do chip: os próximos passos naturais seriam tiling/blocking para registradores e L1 (na direção de um GEMM de biblioteca) e o estudo de N maiores que estourem a L3 de 96 MiB, onde o blocking se torna indispensável. (iii) Resultados obtidos com governor `powersave`; a frequência foi monitorada, mas um governor `performance` reduziria ainda mais a variância. (iv) Os tempos da v4 com 8 threads (~12 ms) são curtos; medições com N maior dariam mais folga entre sinal e ruído.
 
 ## 7. Conclusão
 
-A melhor configuração encontrada é a **v2 — `omp parallel for schedule(static)` no laço externo, com 8 threads fixadas nos cores físicos: 0,341 s, speedup de 11,60× sobre o baseline** (3,952 s), com corretude bit a bit idêntica à referência.
+A melhor configuração encontrada é a **v4 — troca de laços i-k-j + `omp parallel for schedule(static)` no laço externo, com 8 threads fixadas nos cores físicos: 0,0124 s, speedup de 319× sobre o baseline** (3,950 s), com resultado bit a bit idêntico ao da referência.
 
-O principal aprendizado técnico: **o valor de uma técnica depende do gargalo, não da técnica.** Sobre o mesmo kernel, o mesmo padrão OpenMP produziu 1,00× (`simd` que não altera o tráfego de memória), 1,88× com 23 % de eficiência (paralelismo com granularidade fina) e 11,60× (paralelismo com granularidade grossa) — e o ganho superlinear da versão correta só se explica olhando para a interação entre compartilhamento de dados e hierarquia de cache, não para a contagem de threads. Medir, diagnosticar e controlar as variáveis (warm-up, pinning, frequência, validação de corretude) foi o que permitiu distinguir os três desfechos e explicá-los.
+O principal aprendizado técnico: **o valor de uma técnica depende do gargalo, não da técnica.** Sobre o mesmo kernel, construções OpenMP produziram 1,02× (`simd` que não altera o tráfego de memória), 2,20× com 28 % de eficiência (paralelismo com granularidade fina), 12,33× com anomalia superlinear explicada por reuso de cache (paralelismo com granularidade grossa) e 319× quando o paralelismo foi combinado com a correção do padrão de acesso que o diagnóstico apontava desde o início. Medir, diagnosticar e controlar as variáveis (warm-up, pinning, frequência, validação de corretude, experimentos de controle) foi o que permitiu distinguir os quatro desfechos e explicá-los.
 
 ---
 
@@ -132,7 +153,7 @@ O principal aprendizado técnico: **o valor de uma técnica depende do gargalo, 
 
 ```bash
 make            # compila
-make check      # valida corretude das 3 versões contra a v0
+make check      # valida corretude das 4 versões contra a v0
 make bench      # roda todas as medições -> results/raw.csv
 make plots      # gera os gráficos -> results/*.png
 ```

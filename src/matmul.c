@@ -7,10 +7,11 @@
  *   v1 - omp simd no laco INTERNO k (vetorizacao explicita, sequencial)
  *   v2 - omp parallel for no laco EXTERNO i (granularidade grossa)
  *   v3 - omp parallel for no laco INTERNO k (granularidade fina, reduction)
+ *   v4 - v2 + troca de lacos i-k-j (acesso unit-stride, vetorizavel)
  *
  * Uso:
- *   ./matmul <v0|v1|v2|v3> <N> <reps> <threads>     # benchmark, saida CSV
- *   ./matmul --check <v1|v2|v3> <N> <threads>       # valida contra v0
+ *   ./matmul <v0|v1|v2|v3|v4> <N> <reps> <threads>  # benchmark, saida CSV
+ *   ./matmul --check <v1|v2|v3|v4> <N> <threads>    # valida contra v0
  *
  * Saida do benchmark (stdout), uma linha por repeticao:
  *   versao,N,threads,rep,tempo_s
@@ -91,6 +92,24 @@ static void matmul_v3(const double *A, const double *B, double *C, int n) {
     }
 }
 
+/* v4: v2 + troca de lacos i-k-j.
+ * O laco interno passa a percorrer B e C com stride 1 (enderecos
+ * consecutivos), permitindo vetorizacao efetiva e prefetch sequencial.
+ * Para cada (i,j) as contribuicoes continuam sendo acumuladas em ordem
+ * crescente de k, entao o resultado permanece identico ao da v0. */
+static void matmul_v4(const double *A, const double *B, double *C, int n) {
+#pragma omp parallel for schedule(static)
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++)
+            C[(long)i * n + j] = 0.0;
+        for (int k = 0; k < n; k++) {
+            const double a = A[(long)i * n + k];
+            for (int j = 0; j < n; j++)
+                C[(long)i * n + j] += a * B[(long)k * n + j];
+        }
+    }
+}
+
 typedef void (*kernel_fn)(const double *, const double *, double *, int);
 
 static kernel_fn select_kernel(const char *name) {
@@ -98,6 +117,7 @@ static kernel_fn select_kernel(const char *name) {
     if (strcmp(name, "v1") == 0) return matmul_v1;
     if (strcmp(name, "v2") == 0) return matmul_v2;
     if (strcmp(name, "v3") == 0) return matmul_v3;
+    if (strcmp(name, "v4") == 0) return matmul_v4;
     return NULL;
 }
 

@@ -23,6 +23,7 @@ echo "== validacao de corretude ==" | tee "$VAL"
 ./matmul --check v1 "$N" 1 | tee -a "$VAL"
 ./matmul --check v2 "$N" 8 | tee -a "$VAL"
 ./matmul --check v3 "$N" 8 | tee -a "$VAL"
+./matmul --check v4 "$N" 8 | tee -a "$VAL"
 
 echo "== v0 baseline sequencial =="
 ./matmul v0 "$N" "$REPS" 1 | tee -a "$OUT"
@@ -36,6 +37,11 @@ echo "== v3 omp parallel for no laco interno (8 threads) =="
 echo "== v2 omp parallel for no laco externo: escalabilidade 1,2,4,8 threads =="
 for t in 1 2 4 8; do
     ./matmul v2 "$N" "$REPS" "$t" | tee -a "$OUT"
+done
+
+echo "== v4 troca de lacos i-k-j + parallel for externo (1 e 8 threads) =="
+for t in 1 8; do
+    ./matmul v4 "$N" "$REPS" "$t" | tee -a "$OUT"
 done
 
 echo "medicoes salvas em $OUT"
