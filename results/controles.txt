@@ -1,0 +1,25 @@
+Experimentos de controle para a anomalia de speedup superlinear da v2
+(N=1024, OMP_PROC_BIND=close, OMP_PLACES=cores)
+
+1) Frequencia sustentada durante v0 (1 thread, pinada no core 0),
+   amostrada a cada 0,3 s via scaling_cur_freq durante 3 repeticoes:
+     avg = 4958 MHz | min = 3500 MHz | max = 5040 MHz  (n = 52 amostras)
+   -> DVFS/powersave NAO explica a anomalia: o core solo sustenta ~4,96 GHz,
+      ate MAIOR que a frequencia all-core (~4,8 GHz medida com 8 threads).
+
+2) Dois processos v0 independentes co-executando (cores 0 e 2),
+   cada um com suas proprias matrizes A, B, C privadas:
+     processo A (core 0): 3.933 / 3.939 / 3.950 s
+     processo B (core 2): 3.894 / 3.900 / 3.911 s
+   -> identico ao tempo solo (~3,9 s). Co-execucao por si so nao altera o
+      throughput por core. A aceleracao por core observada na v2 (>= 2
+      threads) so ocorre quando as threads COMPARTILHAM a mesma matriz B.
+
+3) v2 com 1 thread = 3.972 s ~= v0 = 3.952 s
+   -> nao ha diferenca de code-gen entre v0 e o corpo paralelo da v2.
+
+Conclusao: a superlinearidade (eficiencia > 100%) esta associada ao reuso
+de B entre threads atraves da hierarquia de cache compartilhada (L3 victim
+cache do Zen 4); threads varrem as mesmas colunas de B aproximadamente em
+fase. Confirmacao definitiva exigiria contadores de hardware (perf),
+indisponiveis sem privilegio de root nesta maquina (perf_event_paranoid=4).
