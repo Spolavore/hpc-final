@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
-"""Gera os graficos do relatorio a partir de results/raw.csv."""
+"""Gera os graficos do relatorio a partir de um CSV de medicoes.
+
+Uso: python3 analysis/plot.py [caminho/para/raw.csv]
+     (default: results/raw.csv; os PNGs sao salvos ao lado do CSV)
+
+O script deriva do proprio CSV: N, numero de repeticoes, o sweep de
+threads da v2 e o numero maximo de threads de cada versao — o mesmo
+codigo plota os resultados da maquina local e os do cluster (PCAD).
+"""
 
 import csv
 import statistics
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -13,7 +22,6 @@ from matplotlib.path import Path as MplPath
 from matplotlib.patches import PathPatch
 
 ROOT = Path(__file__).resolve().parent.parent
-RESULTS = ROOT / "results"
 
 # paleta validada (skill dataviz): azul serie unica + tokens de tinta
 BLUE = "#2a78d6"
@@ -27,13 +35,19 @@ BASELINE = "#c3c2b7"
 DPI = 200
 
 
-def load():
-    data = {}
-    with open(RESULTS / "raw.csv") as f:
+def load(csv_path):
+    data, sizes = {}, set()
+    with open(csv_path) as f:
         for row in csv.DictReader(f):
             key = (row["versao"], int(row["threads"]))
             data.setdefault(key, []).append(float(row["tempo_s"]))
-    return {k: (statistics.median(v), statistics.stdev(v)) for k, v in data.items()}
+            sizes.add(int(row["N"]))
+    if len(sizes) != 1:
+        sys.exit(f"erro: esperava um unico N no CSV, encontrei {sorted(sizes)}")
+    stats = {k: (statistics.median(v),
+                 statistics.stdev(v) if len(v) > 1 else 0.0, len(v))
+             for k, v in data.items()}
+    return stats, sizes.pop()
 
 
 def fmt(v, dec=2, suf=""):
@@ -56,7 +70,7 @@ def new_fig():
 def titles(fig, title, subtitle):
     fig.text(0.075, 0.945, title, fontsize=13, fontweight="bold", color=INK)
     fig.text(0.075, 0.885, subtitle, fontsize=9.5, color=INK2)
-    fig.subplots_adjust(top=0.80, left=0.075, right=0.97, bottom=0.17)
+    fig.subplots_adjust(top=0.80, left=0.105, right=0.97, bottom=0.17)
 
 
 def rounded_bar(ax, cx, h, w, color, r_px=8):
@@ -74,8 +88,8 @@ def rounded_bar(ax, cx, h, w, color, r_px=8):
                            linewidth=0, zorder=3))
 
 
-def bar_chart(fname, title, subtitle, labels, values, val_labels,
-              ylabel, ymax, ref_line=None, ref_label=None):
+def bar_chart(out, title, subtitle, labels, values, val_labels,
+              ylabel, ymax, ref_line=None):
     fig, ax = new_fig()
     ax.set_xlim(-0.55, len(values) - 0.45)
     ax.set_ylim(0, ymax)
@@ -86,48 +100,53 @@ def bar_chart(fname, title, subtitle, labels, values, val_labels,
     if ref_line is not None:
         ax.axhline(ref_line, color=MUTED, linewidth=1.2,
                    linestyle=(0, (4, 3)), zorder=2)
-        if ref_label:
-            ax.text(len(values) - 0.48, ref_line + ymax * 0.015, ref_label,
-                    ha="right", fontsize=8.5, color=MUTED)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, fontsize=9)
     ax.set_ylabel(ylabel, fontsize=10, color=INK2)
     titles(fig, title, subtitle)
-    fig.savefig(RESULTS / fname, facecolor=SURFACE)
+    fig.savefig(out, facecolor=SURFACE)
     plt.close(fig)
 
 
 def main():
-    d = load()
+    csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "results" / "raw.csv"
+    outdir = csv_path.parent
+    d, n = load(csv_path)
     t = {k: v[0] for k, v in d.items()}  # medianas
-    base = t[("v0", 1)]
 
-    versions = [("v0", 1), ("v1", 1), ("v3", 8), ("v2", 8), ("v4", 8)]
-    labels = [
-        "v0\nbaseline ijk\nsequencial",
-        "v1\n+ omp simd\n(laço interno)",
-        "v3\nparallel for interno\n8 threads",
-        "v2\nparallel for externo\n8 threads",
-        "v4\nikj + parallel for\n8 threads",
-    ]
+    base = t[("v0", 1)]
+    reps = d[("v0", 1)][2]
+    pmax = {v: max(p for (vv, p) in t if vv == v)
+            for v in {vv for (vv, _) in t}}
+
+    label_of = {
+        "v0": "v0\nbaseline ijk\nsequencial",
+        "v1": "v1\n+ omp simd\n(laço interno)",
+        "v3": f"v3\nparallel for interno\n{pmax.get('v3', 0)} threads",
+        "v2": f"v2\nparallel for externo\n{pmax.get('v2', 0)} threads",
+        "v4": f"v4\nikj + parallel for\n{pmax.get('v4', 0)} threads",
+    }
+    versions = [(v, 1 if v in ("v0", "v1") else pmax[v])
+                for v in ("v0", "v1", "v3", "v2", "v4") if v in pmax]
+    labels = [label_of[v] for v, _ in versions]
 
     # 1. tempo por versao
-    times = [t[v] for v in versions]
+    times = [t[k] for k in versions]
     bar_chart(
-        "tempo_por_versao.png",
+        outdir / "tempo_por_versao.png",
         "Tempo de execução por versão",
-        "Matmul N=1024, dupla precisão — mediana de 5 repetições — menor é melhor",
+        f"Matmul N={n}, dupla precisão — mediana de {reps} repetições — menor é melhor",
         labels, times,
         [fmt(v, 3 if v < 0.1 else 2, " s") for v in times],
         "Tempo (s)", max(times) * 1.18,
     )
 
     # 2. speedup por versao
-    sp = [base / t[v] for v in versions]
+    sp = [base / t[k] for k in versions]
     bar_chart(
-        "speedup_por_versao.png",
+        outdir / "speedup_por_versao.png",
         "Speedup por versão (vs. baseline v0)",
-        "Matmul N=1024 — maior é melhor; linha tracejada marca o baseline (1×)",
+        f"Matmul N={n} — maior é melhor; linha tracejada marca o baseline (1×)",
         labels, sp,
         [fmt(v, 0 if v >= 100 else (1 if v >= 10 else 2), "×") for v in sp],
         "Speedup", max(sp) * 1.18,
@@ -135,8 +154,9 @@ def main():
     )
 
     # 3. escalabilidade v2: medido vs ideal
-    threads = [1, 2, 4, 8]
+    threads = sorted(p for (v, p) in t if v == "v2")
     measured = [base / t[("v2", p)] for p in threads]
+    top = max(max(measured), threads[-1]) * 1.1
     fig, ax = new_fig()
     ax.plot(threads, threads, color=MUTED, linewidth=1.6,
             linestyle=(0, (4, 3)), zorder=2, label="ideal (linear)")
@@ -144,31 +164,31 @@ def main():
             markersize=7.5, markeredgecolor=SURFACE, markeredgewidth=2,
             zorder=3, label="v2 medido")
     for p, s in zip(threads, measured):
-        dx, dy, align = ((10, -4, "left") if p == 1 else (-2, 9, "right"))
+        dx, dy, align = ((10, -4, "left") if p == threads[0] else (-2, 9, "right"))
         ax.annotate(fmt(s, 1, "×"), (p, s), textcoords="offset points",
                     xytext=(dx, dy), ha=align, fontsize=9.5,
                     fontweight="semibold", color=INK)
-    ax.set_xlim(0.6, 8.4)
-    ax.set_ylim(0, 13)
+    span = threads[-1] - threads[0]
+    ax.set_xlim(threads[0] - span * 0.06, threads[-1] + span * 0.06)
+    ax.set_ylim(0, top)
     ax.set_xticks(threads)
     ax.set_xlabel("Número de threads", fontsize=10, color=INK2)
     ax.set_ylabel("Speedup vs. v0", fontsize=10, color=INK2)
-    ax.legend(loc="upper left", frameon=False, fontsize=9.5,
-              labelcolor=INK2)
+    ax.legend(loc="upper left", frameon=False, fontsize=9.5, labelcolor=INK2)
     titles(fig, "Escalabilidade da v2: speedup vs. número de threads",
-           "Matmul N=1024 — pontos acima da linha ideal indicam "
+           f"Matmul N={n} — pontos acima da linha ideal indicam "
            "speedup superlinear (ver discussão)")
-    fig.savefig(RESULTS / "escalabilidade_v2.png", facecolor=SURFACE)
+    fig.savefig(outdir / "escalabilidade_v2.png", facecolor=SURFACE)
     plt.close(fig)
 
-    # 4. eficiencia paralela v2 (vs v2 com 1 thread)
-    v2_1 = t[("v2", 1)]
-    eff = [(v2_1 / t[("v2", p)]) / p * 100 for p in threads]
+    # 4. eficiencia paralela v2 (vs v2 com o menor numero de threads do sweep)
+    v2_ref = t[("v2", threads[0])] * threads[0]
+    eff = [(v2_ref / t[("v2", p)]) / p * 100 for p in threads]
     bar_chart(
-        "eficiencia_v2.png",
+        outdir / "eficiencia_v2.png",
         "Eficiência paralela da v2",
-        "eficiência(p) = speedup(p) / p, relativa à v2 com 1 thread — "
-        "acima de 100% = superlinear",
+        f"eficiência(p) = speedup(p) / p, relativa à v2 com {threads[0]} thread"
+        f"{'s' if threads[0] > 1 else ''} — acima de 100% = superlinear",
         [f"{p} thread{'s' if p > 1 else ''}" for p in threads],
         eff, [fmt(v, 0, "%") for v in eff],
         "Eficiência (%)", max(eff) * 1.22,
@@ -177,9 +197,10 @@ def main():
 
     # tabela-resumo no stdout (para o relatorio)
     print("versao,threads,mediana_s,desvio_s,speedup_vs_v0,gflops")
-    flops = 2 * 1024**3
-    for (v, p), (med, sd) in sorted(d.items()):
+    flops = 2 * n**3
+    for (v, p), (med, sd, _) in sorted(d.items()):
         print(f"{v},{p},{med:.4f},{sd:.4f},{base/med:.3f},{flops/med/1e9:.3f}")
+    print(f"[INFO] graficos salvos em {outdir}/", file=sys.stderr)
 
 
 if __name__ == "__main__":

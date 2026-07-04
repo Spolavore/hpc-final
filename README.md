@@ -18,7 +18,9 @@ src/matmul.c       kernels v0 (baseline), v1 (simd), v2 (paralelo externo),
                    v3 (paralelo interno), v4 (ikj + paralelo) + validação
                    e benchmark
 bench/run.sh       roda todas as medições -> results/raw.csv
-analysis/plot.py   gera os gráficos -> results/*.png
+                   (parametrizável: N, REPS, THREADS_SWEEP, MAX_THREADS, OUT_DIR)
+bench/pcad/        job SLURM para o cluster PCAD/UFRGS (partição hype)
+analysis/plot.py   gera os gráficos a partir de um CSV (default results/raw.csv)
 results/           medições (CSV), gráficos, validação e experimentos de controle
 relatorio.md       relatório (problema, baseline, diagnóstico, otimizações,
                    resultados, discussão, conclusão)
@@ -44,3 +46,23 @@ Uso direto do binário:
 
 Ambiente dos resultados reportados: AMD Ryzen 7 7800X3D (8 cores, AVX-512,
 L3 96 MiB), gcc 15.2, Linux 6.17, `OMP_PROC_BIND=close OMP_PLACES=cores`.
+
+## Execução no PCAD (partição hype)
+
+No front-end do PCAD (`gppd-hpc.inf.ufrgs.br`):
+
+```bash
+curl -O https://raw.githubusercontent.com/Spolavore/hpc-final/main/bench/pcad/hype.slurm
+sbatch hype.slurm
+squeue -u "$USER"          # acompanhar a fila
+```
+
+O job clona o repo no `$SCRATCH` do nó, valida a corretude, roda o benchmark
+com sweep de 1–20 cores físicos (+ uma medição extra com 40 threads/HT em
+`raw_ht.csv`) e copia tudo para `~/resultados-hpc-final/<jobid>/` no `$HOME`
+(NFS — os arquivos ficam acessíveis no front-end após o fim da alocação).
+Para gerar os gráficos localmente a partir desses dados:
+
+```bash
+python3 analysis/plot.py results-hype/raw.csv
+```
