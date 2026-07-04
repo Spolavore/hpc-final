@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -O3 -march=native -fopenmp -Wall -Wextra
+CFLAGS  = -std=gnu11 -O3 -march=native -fopenmp -Wall -Wextra
 LDFLAGS = -lm
 
 matmul: src/matmul.c

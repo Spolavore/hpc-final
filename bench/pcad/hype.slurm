@@ -14,11 +14,14 @@
 # Submissao (no front-end gppd-hpc.inf.ufrgs.br):
 #   sbatch hype.slurm
 #
+# A alocacao de nos no PCAD e exclusiva: cpus-per-task=1 segue o padrao
+# comprovado do projeto perf-analysis (stage3/run.slurm), que usa todos os
+# cores do no com essa mesma configuracao.
 #SBATCH --job-name=hpc-final-matmul
 #SBATCH --partition=hype
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=1
 #SBATCH --time=02:00:00
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
@@ -38,7 +41,6 @@ N=1024
 REPS=5
 THREADS_SWEEP="1 2 4 8 16 20"   # cores fisicos da hype
 MAX_THREADS=20
-HT_THREADS=40                   # todos os processadores logicos
 
 echo "[INFO] Hostname: $(hostname) | Job: ${SLURM_JOB_ID:-n/a} | $(date)"
 
@@ -65,6 +67,7 @@ mkdir -p results
     echo "job: ${SLURM_JOB_ID:-n/a}"
     gcc --version | head -1
     echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo indisponivel)"
+    echo "nproc: $(nproc)"
     lscpu
 } > results/ambiente.txt
 
@@ -73,13 +76,19 @@ N="$N" REPS="$REPS" THREADS_SWEEP="$THREADS_SWEEP" MAX_THREADS="$MAX_THREADS" \
     bash bench/run.sh
 
 # 4. extra: Hyper-Threading (1 thread por processador logico), CSV separado
-#    para nao poluir os graficos principais (metodologia = cores fisicos)
-echo "[INFO] Medicao extra com HT: ${HT_THREADS} threads (OMP_PLACES=threads)"
-export OMP_PROC_BIND=close OMP_PLACES=threads
-HT_OUT=results/raw_ht.csv
-echo "versao,N,threads,rep,tempo_s" > "$HT_OUT"
-./matmul v2 "$N" "$REPS" "$HT_THREADS" | tee -a "$HT_OUT"
-./matmul v4 "$N" "$REPS" "$HT_THREADS" | tee -a "$HT_OUT"
+#    para nao poluir os graficos principais (metodologia = cores fisicos).
+#    So roda se o no expuser mais processadores logicos que cores fisicos.
+HT_THREADS=$(nproc)
+if (( HT_THREADS > MAX_THREADS )); then
+    echo "[INFO] Medicao extra com HT: ${HT_THREADS} threads (OMP_PLACES=threads)"
+    export OMP_PROC_BIND=close OMP_PLACES=threads
+    HT_OUT=results/raw_ht.csv
+    echo "versao,N,threads,rep,tempo_s" > "$HT_OUT"
+    ./matmul v2 "$N" "$REPS" "$HT_THREADS" | tee -a "$HT_OUT"
+    ./matmul v4 "$N" "$REPS" "$HT_THREADS" | tee -a "$HT_OUT"
+else
+    echo "[INFO] HT indisponivel (nproc=$HT_THREADS <= $MAX_THREADS cores); pulando medicao extra"
+fi
 
 # 5. copia os resultados para o HOME (NFS: acessivel do front-end apos o job)
 mkdir -p "$HOME_RESULTS_DIR"
