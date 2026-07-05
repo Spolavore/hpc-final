@@ -44,6 +44,22 @@ MAX_THREADS=20
 
 echo "[INFO] Hostname: $(hostname) | Job: ${SLURM_JOB_ID:-n/a} | $(date)"
 
+# O $SCRATCH e local ao no e o acesso termina com a alocacao: copia os
+# resultados para o $HOME (NFS) SEMPRE — inclusive em falha, cancelamento
+# ou timeout (SIGTERM) — para nunca perder o que ja foi medido.
+RESULTS_COPIED=0
+copy_results() {
+    (( RESULTS_COPIED )) && return 0
+    RESULTS_COPIED=1
+    if [[ -d "$REPO_DIR/results" ]]; then
+        mkdir -p "$HOME_RESULTS_DIR"
+        cp -r "$REPO_DIR/results/." "$HOME_RESULTS_DIR"/ || true
+        echo "[INFO] Resultados copiados para $HOME_RESULTS_DIR"
+    fi
+}
+trap copy_results EXIT
+trap 'copy_results; exit 143' TERM
+
 # 1. copia limpa do repositorio no scratch local do no
 if [[ -d "$REPO_DIR" ]]; then
     echo "[INFO] Removendo copia anterior: $REPO_DIR"
@@ -90,8 +106,5 @@ else
     echo "[INFO] HT indisponivel (nproc=$HT_THREADS <= $MAX_THREADS cores); pulando medicao extra"
 fi
 
-# 5. copia os resultados para o HOME (NFS: acessivel do front-end apos o job)
-mkdir -p "$HOME_RESULTS_DIR"
-cp -r results/. "$HOME_RESULTS_DIR"/
-echo "[INFO] Resultados copiados para $HOME_RESULTS_DIR"
+# 5. a copia para o HOME e feita pelo trap copy_results (EXIT/TERM)
 echo "[INFO] Job finalizado com sucesso."
