@@ -75,7 +75,7 @@ for (i = 0; i < n; i++)
 % ---------------------------------------------------------------- 4. diagnostico
 \begin{frame}{Diagnóstico do gargalo}
   \begin{itemize}
-    \item Pico teórico do nó $\approx$ 736 GFLOP/s; a v0 atinge \textbf{0,94 GFLOP/s $\approx$ 0,1\%} $\rightarrow$ o gargalo \textbf{não} é cômputo.
+    \item Pico teórico do nó $\approx$ 736 GFLOP/s; a v0 atinge \textbf{0,94 GFLOP/s $\approx$ 0,1\%} $\rightarrow$ o gargalo \textbf{não} é processamento.
     \item Laço interno lê \texttt{B[k*n+j]} com \textbf{stride de 8 KiB}: cada iteração toca uma linha de cache nova e usa só 1 dos 8 doubles trazidos.
     \item Sintoma do mapa da disciplina: \emph{tempo dominado por memória / acessos com stride}.
   \end{itemize}
@@ -212,7 +212,7 @@ for (i = 0; i < n; i++) \{
 % ---------------------------------------------------------------- 11. discussao
 \begin{frame}{Discussão: por que cada resultado aconteceu}
   \begin{itemize}
-    \item \textbf{v1 (0,96$\times$):} SIMD multiplica cômputo, mas o tempo é gasto esperando memória. \emph{Uma técnica só é boa otimização quando resolve o gargalo dominante.}
+    \item \textbf{v1 (0,96$\times$):} SIMD multiplica a capacidade de cálculo, mas o tempo é gasto esperando memória. \emph{Uma técnica só é boa otimização quando resolve o gargalo dominante.}
     \item \textbf{v3 (0,23$\times$):} $10^6$ regiões paralelas $\Rightarrow$ fork/join + barreiras \textbf{atravessando 2 sockets NUMA} custam mais que o trabalho útil.
     \item \textbf{v2 (17,5$\times$, 87\%):} granularidade grossa escala quase linear; a eficiência cai suavemente ao ocupar o segundo socket (acessos NUMA remotos).
     \item \textbf{v4 (132$\times$):} o par v1/v4 fecha a prova --- as mesmas unidades SIMD rendem 0,96$\times$ com stride e 7,9$\times$ (1 thread) com acesso corrigido; com 20 threads, 123,5 GFLOP/s.

@@ -88,7 +88,7 @@ ordem dos laços para eliminar os pulos — atacar a causa raiz."
   N = 1024 doubles = 8 KiB (péssimo: cada acesso cai numa linha de cache
   diferente).
 - *GFLOP/s*: bilhões de operações de ponto flutuante por segundo. Comparar o
-  medido com o pico teórico diz se o gargalo é cômputo ou memória.
+  medido com o pico teórico diz se o gargalo é cálculo ou memória.
 
 ---
 
@@ -265,7 +265,7 @@ multiplicações).
 
 **"Como você sabe que o gargalo era memória sem usar perf?"**
 Métricas derivadas: 0,1% do pico teórico de FLOP/s com desvio baixíssimo
-descarta gargalo de cômputo; a análise do padrão de acesso (stride de 8 KiB,
+descarta gargalo de processamento; a análise do padrão de acesso (stride de 8 KiB,
 1/8 da linha de cache aproveitada) aponta a causa; e a v4 é o experimento que
 confirma — mudando só o padrão de acesso, o mesmo hardware rendeu 46x mais
 por thread (0,29 s → contra 2,3 s da v0 com 1 thread ≈ 7,9x… e 132x com 20).

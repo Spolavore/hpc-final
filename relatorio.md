@@ -41,12 +41,12 @@ Cada versão otimizada é comparada elemento a elemento com o resultado da v0 so
 
 ## 3. Diagnóstico do gargalo
 
-Um núcleo Zen 4 a ~4,9 GHz executando FMA vetorial tem pico teórico de ~76,8 GFLOP/s (o chip inteiro, ~614 GFLOP/s). A v0 atinge **0,544 GFLOP/s — menos de 1 % do pico de um único core** — logo o gargalo não é capacidade de cômputo.
+Um núcleo Zen 4 a ~4,9 GHz executando FMA vetorial tem pico teórico de ~76,8 GFLOP/s (o chip inteiro, ~614 GFLOP/s). A v0 atinge **0,544 GFLOP/s — menos de 1 % do pico de um único core** — logo o gargalo não é capacidade de cálculo.
 
 O laço interno percorre `B[k*n + j]` com **stride de N elementos (8 KiB)**: cada iteração toca uma linha de cache diferente, de uma região de 8 MiB que não cabe na L2 (1 MiB), e usa apenas 1 dos 8 doubles da linha trazida. A latência de acesso domina o tempo (≈ 18 ciclos por iteração a 4,96 GHz), caracterizando um kernel **memory-latency-bound** por padrão de acesso — o sintoma "tempo dominado por memória / acessos com stride" do mapa de decisão da disciplina. As hipóteses de intervenção formuladas:
 
 - **H1 (falsa):** o laço interno é um produto escalar; pedir vetorização explícita (`omp simd`) aproveitaria as unidades AVX-512 e reduziria o tempo.
-- **H2 (verdadeira):** o laço externo tem 1024 iterações independentes; distribuí-las entre os 8 cores com granularidade grossa multiplica o throughput agregado de acesso à memória e o cômputo.
+- **H2 (verdadeira):** o laço externo tem 1024 iterações independentes; distribuí-las entre os 8 cores com granularidade grossa multiplica o throughput agregado de acesso à memória e de cálculo.
 - **H3 (verdadeira, segunda iteração do ciclo):** enquanto o acesso a `B` tiver stride, nem SIMD nem threads chegam perto do pico; **trocar a ordem dos laços** para tornar o acesso unit-stride ataca a causa raiz.
 
 ## 4. Otimizações
@@ -125,7 +125,7 @@ Após a v2, o ciclo de otimização volta ao diagnóstico: o tempo caiu 12×, ma
 
 ## 6. Discussão
 
-**Por que a v1 não melhorou.** A hipótese H1 falhou porque tratou o kernel como compute-bound. A vetorização aconteceu de fato (vetores de 64 bytes confirmados pelo compilador), mas SIMD só multiplica a taxa de *cômputo* — e o tempo da v0 é gasto esperando linhas de cache do acesso com stride a `B`. Montar o vetor com 8 cargas escalares custa o mesmo tráfego de memória que o código escalar, e o resultado é um empate estatístico (1,02×; a variação entre execuções completas do benchmark é da mesma ordem, ±2 %). É o caso previsto no material da disciplina: *uma técnica conhecida só é uma boa otimização quando resolve o gargalo dominante* — aqui, o gargalo é o padrão de acesso, não a falta de instruções vetoriais.
+**Por que a v1 não melhorou.** A hipótese H1 falhou porque tratou o kernel como compute-bound. A vetorização aconteceu de fato (vetores de 64 bytes confirmados pelo compilador), mas SIMD só multiplica a velocidade das operações aritméticas — e o tempo da v0 é gasto esperando linhas de cache do acesso com stride a `B`. Montar o vetor com 8 cargas escalares custa o mesmo tráfego de memória que o código escalar, e o resultado é um empate estatístico (1,02×; a variação entre execuções completas do benchmark é da mesma ordem, ±2 %). É o caso previsto no material da disciplina: *uma técnica conhecida só é uma boa otimização quando resolve o gargalo dominante* — aqui, o gargalo é o padrão de acesso, não a falta de instruções vetoriais.
 
 **Por que a v3 ficou no meio do caminho.** Paralelizar o laço errado rendeu 2,20× com 8 cores — ganho positivo, porém com **eficiência de 28 %**: quase três quartos da capacidade contratada são desperdiçados criando ~1 milhão de regiões paralelas, cada uma com reduction e barreira. O ganho só não é pior porque a libgomp usa espera ativa (busy-wait), que barateia o fork/join, e porque 8 threads acessando `B` em paralelo escondem parte da latência de memória. A v3 é também a versão de maior variabilidade entre execuções (σ e deriva entre benchmarks completos visivelmente maiores) — sincronização fina torna o tempo sensível a ruído do sistema. O resultado confirma a lição da Família 7: *o overhead de paralelizar pode ser da ordem do ganho* quando a granularidade é fina — mesmo quando não chega a piorar o tempo, destrói a eficiência.
 
