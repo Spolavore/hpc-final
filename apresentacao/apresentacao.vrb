@@ -1,0 +1,15 @@
+\frametitle{Reprodução}
+\begin{itemize}
+    \item Código, job SLURM, dados brutos e gráficos: \texttt{github.com/Spolavore/hpc-final}
+  \end{itemize}
+\begin{semiverbatim}\small
+# no front-end do PCAD
+curl -O https://raw.githubusercontent.com/Spolavore/\\
+     hpc-final/main/bench/pcad/hype.slurm
+sbatch hype.slurm     # resultados em ~/resultados-hpc-final/<jobid>/
+
+# na maquina local
+python3 analysis/plot.py results-hype/raw.csv
+\end{semiverbatim}
+  \vfill
+  \footnotesize Some experiments in this work used the PCAD infrastructure, \texttt{http://pcad.inf.ufrgs.br}, at INF/UFRGS.
