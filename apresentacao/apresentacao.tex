@@ -18,44 +18,30 @@
 
 \begin{document}
 
+% ---------------------------------------------------------------- 1. titulo
 \begin{frame}
   \titlepage
 \end{frame}
 
-% ---------------------------------------------------------------- 1. problema
-\begin{frame}{Problema e aplicação}
-  \begin{itemize}
-    \item \textbf{Multiplicação de matrizes densas} $C = A \times B$, dupla precisão, $N = 1024$.
-    \item $2 N^3 \approx 2{,}15$ GFLOP por execução; matrizes de 8 MiB (24 MiB no total).
-    \item Núcleo de álgebra linear, simulação e aprendizado de máquina; caso clássico de kernel com \textbf{reuso de dados} e \textbf{paralelismo abundante}.
-  \end{itemize}
-  \begin{block}{Pergunta da investigação}
-    Dado um código sequencial com gargalo conhecido, \emph{quais intervenções OpenMP produzem ganho real, quais não produzem, e por quê?}
-  \end{block}
-  \begin{itemize}
-    \item O objetivo \textbf{não} é competir com BLAS, e sim explicar a relação entre arquitetura, técnica e resultado.
-  \end{itemize}
-\end{frame}
-
-% ---------------------------------------------------------------- 2. ambiente
-\begin{frame}{Ambiente de execução: PCAD/UFRGS, partição hype}
+% ---------------------------------------------------------------- 2. problema + ambiente
+\begin{frame}{Problema, aplicação e ambiente}
   \begin{columns}[T]
     \column{0.52\textwidth}
-      \textbf{Nó hype5 (alocação exclusiva via SLURM)}
+      \textbf{Problema}
       \begin{itemize}
-        \item 2$\times$ Intel Xeon E5-2650 v3 @ 2,3 GHz (Haswell, AVX2);
-        \item 10 cores por socket $\rightarrow$ \textbf{20 cores físicos / 40 threads HT};
-        \item \textbf{2 nós NUMA}; L3 de 25 MiB por socket;
-        \item 128 GB DDR4; gcc 12.2 (Debian 12).
+        \item Multiplicação de matrizes densas $C = A \times B$, dupla precisão, $N = 1024$;
+        \item $2N^3 \approx 2{,}15$ GFLOP por execução; 24 MiB de dados;
+        \item núcleo de álgebra linear, simulação e ML; reuso de dados e paralelismo abundante.
       \end{itemize}
+      \begin{block}{Pergunta da investigação}
+        Quais intervenções OpenMP produzem ganho real, quais não produzem, e \emph{por quê}?
+      \end{block}
     \column{0.44\textwidth}
-      \textbf{Execução}
+      \textbf{Ambiente: PCAD/UFRGS, nó hype5}
       \begin{itemize}
-        \item Job não-interativo (\texttt{sbatch});
-        \item repo clonado no \texttt{\$SCRATCH} do nó;
-        \item compilação no próprio nó:\\ \texttt{-O3 -march=native -fopenmp};
-        \item governor DVFS: \texttt{performance};
-        \item resultados copiados ao \texttt{\$HOME} (NFS).
+        \item 2$\times$ Xeon E5-2650 v3 (Haswell): \textbf{20 cores / 40 threads HT, 2 sockets NUMA};
+        \item 128 GB DDR4; L3 25 MiB/socket;
+        \item job \texttt{sbatch} exclusivo; compilação no nó (\texttt{-O3 -march=native -fopenmp}); governor \texttt{performance}.
       \end{itemize}
   \end{columns}
   \vfill
@@ -63,7 +49,7 @@
 \end{frame}
 
 % ---------------------------------------------------------------- 3. baseline
-\begin{frame}[fragile]{Baseline e metodologia de medição}
+\begin{frame}[fragile]{Baseline (v0) e metodologia de medição}
   \begin{columns}[T]
     \column{0.46\textwidth}
       \textbf{v0: laços i-j-k canônicos}
@@ -76,13 +62,13 @@ for (i = 0; i < n; i++)
     C[i*n+j] = sum;
   \}
 \end{semiverbatim}
-      \textbf{Baseline: 2,298 s} ($\sigma = 0{,}0003$) $\rightarrow$ 0,94 GFLOP/s
+      \textbf{Baseline: 2,298 s} ($\sigma$ = 0,0003)
     \column{0.50\textwidth}
       \textbf{Metodologia}
       \begin{itemize}
-        \item 1 warm-up não medido + \textbf{5 repetições}; mediana $\pm$ desvio ($< 1\%$);
-        \item threads fixadas nos cores físicos\\ (\texttt{OMP\_PROC\_BIND=close}, \texttt{OMP\_PLACES=cores});
-        \item mesmas entradas em todas as versões (gerador determinístico);
+        \item 1 warm-up não medido + \textbf{5 repetições}; mediana $\pm$ desvio ($<1\%$);
+        \item threads fixadas nos cores físicos (\texttt{OMP\_PROC\_BIND}/\texttt{OMP\_PLACES});
+        \item mesmas entradas em todas as versões;
         \item \textbf{validação}: comparação elemento a elemento com a v0 --- diferença \textbf{zero} nas 4 versões.
       \end{itemize}
   \end{columns}
@@ -91,22 +77,21 @@ for (i = 0; i < n; i++)
 % ---------------------------------------------------------------- 4. diagnostico
 \begin{frame}{Diagnóstico do gargalo}
   \begin{itemize}
-    \item Pico teórico do nó $\approx$ 736 GFLOP/s (20 cores $\times$ 16 flops/ciclo $\times$ 2,3 GHz).
-    \item A v0 atinge \textbf{0,94 GFLOP/s $\approx$ 0,1\% do pico do nó} $\rightarrow$ o gargalo \textbf{não} é capacidade de cômputo.
-    \item Laço interno lê \texttt{B[k*n+j]} com \textbf{stride de $N$ elementos (8 KiB)}: uma linha de cache nova por iteração, usando 1 dos 8 doubles trazidos.
-    \item Sintoma do mapa de decisão da disciplina: \emph{tempo dominado por memória / acessos com stride}.
+    \item Pico teórico do nó $\approx$ 736 GFLOP/s; a v0 atinge \textbf{0,94 GFLOP/s $\approx$ 0,1\%} $\rightarrow$ o gargalo \textbf{não} é cômputo.
+    \item Laço interno lê \texttt{B[k*n+j]} com \textbf{stride de 8 KiB}: cada iteração toca uma linha de cache nova e usa só 1 dos 8 doubles trazidos.
+    \item Sintoma do mapa da disciplina: \emph{tempo dominado por memória / acessos com stride}.
   \end{itemize}
   \begin{block}{Hipóteses de intervenção}
     \begin{enumerate}
-      \item[H1.] Vetorizar o produto escalar (\texttt{omp simd}) aproveita as unidades SIMD. \hfill \alert{(falsa)}
-      \item[H2.] Paralelizar o laço externo com granularidade grossa escala com os cores. \hfill (verdadeira)
-      \item[H3.] Trocar a ordem dos laços elimina o stride --- ataca a causa raiz. \hfill (verdadeira)
+      \item[H1.] Vetorizar o produto escalar (\texttt{omp simd}). \hfill \alert{(falsa)}
+      \item[H2.] Paralelizar o laço externo com granularidade grossa. \hfill (verdadeira)
+      \item[H3.] Trocar a ordem dos laços para eliminar o stride --- a causa raiz. \hfill (verdadeira)
     \end{enumerate}
   \end{block}
 \end{frame}
 
-% ---------------------------------------------------------------- 5. otimizacoes v1
-\begin{frame}[fragile]{Otimização v1 --- \texttt{omp simd} no laço interno (sem ganho)}
+% ---------------------------------------------------------------- 5. v1
+\begin{frame}[fragile]{v1 --- \texttt{omp simd} no laço interno (sem ganho)}
   \begin{columns}[T]
     \column{0.5\textwidth}
 \begin{semiverbatim}\small
@@ -116,12 +101,12 @@ for (k = 0; k < n; k++)
   sum += A[i*n+k] * B[k*n+j];
 \end{semiverbatim}
       \begin{itemize}
-        \item \textbf{Hipótese (H1):} SIMD $\approx$ 4 doubles/instrução (AVX2) $\rightarrow$ ganho esperado $\sim$4$\times$.
+        \item \textbf{Hipótese:} SIMD processa 4 doubles por instrução (AVX2) $\rightarrow$ $\sim$4$\times$.
       \end{itemize}
     \column{0.46\textwidth}
       \begin{itemize}
-        \item O compilador \textbf{vetoriza de fato} (\texttt{-fopt-info-vec}), mas monta os vetores de \texttt{B} com cargas escalares --- o acesso tem stride.
-        \item O tráfego de memória por iteração \textbf{não muda}.
+        \item O compilador \textbf{vetoriza de fato}, mas monta os vetores de \texttt{B} com cargas escalares --- o acesso tem stride;
+        \item o tráfego de memória por iteração \textbf{não muda}.
       \end{itemize}
       \begin{alertblock}{Resultado medido}
         2,388 s $\rightarrow$ \textbf{0,96$\times$} (leve piora)
@@ -129,11 +114,11 @@ for (k = 0; k < n; k++)
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- 6. otimizacoes v2 v3
-\begin{frame}[fragile]{Otimizações v2 e v3 --- a MESMA técnica, granularidades opostas}
+% ---------------------------------------------------------------- 6. v2 e v3
+\begin{frame}[fragile]{v2 e v3 --- a MESMA técnica, granularidades opostas}
   \begin{columns}[T]
     \column{0.48\textwidth}
-      \textbf{v2: laço externo (grossa)}
+      \textbf{v2: laço externo (grossa) $\rightarrow$ 17,5$\times$}
 \begin{semiverbatim}\small
 #pragma omp parallel for \\
         schedule(static)
@@ -142,10 +127,9 @@ for (i = 0; i < n; i++)
 \end{semiverbatim}
       \begin{itemize}
         \item 1 região paralela; $N/p$ linhas por thread, sem sincronização interna.
-        \item Corpo idêntico à v0 $\rightarrow$ isola o efeito do paralelismo (v2@1 $=$ 2,294 s $\approx$ v0).
       \end{itemize}
     \column{0.48\textwidth}
-      \textbf{v3: laço interno (fina)}
+      \textbf{v3: laço interno (fina) $\rightarrow$ \alert{0,23$\times$}}
 \begin{semiverbatim}\small
 for (i ...) for (j ...) \{
 #pragma omp parallel for \\
@@ -154,14 +138,13 @@ for (i ...) for (j ...) \{
 \}
 \end{semiverbatim}
       \begin{itemize}
-        \item Região paralela criada $N^2 \approx 10^6$ vezes;
-        \item cada uma distribui só 1024 multiplicações e termina em reduction + \textbf{barreira entre 2 sockets}.
+        \item Região paralela criada $N^2 \approx 10^6$ vezes; reduction + \textbf{barreira entre 2 sockets} a cada vez.
       \end{itemize}
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- 7. otimizacao v4
-\begin{frame}[fragile]{Otimização v4 --- troca de laços i-k-j (segunda iteração do ciclo)}
+% ---------------------------------------------------------------- 7. v4
+\begin{frame}[fragile]{v4 --- troca de laços i-k-j (ataca a causa raiz)}
   \begin{columns}[T]
     \column{0.5\textwidth}
 \begin{semiverbatim}\small
@@ -178,14 +161,14 @@ for (i = 0; i < n; i++) \{
 \end{semiverbatim}
     \column{0.46\textwidth}
       \begin{itemize}
-        \item Após a v2 o ciclo volta ao diagnóstico: throughput ainda $\approx$ 2\% do pico $\rightarrow$ o stride continua lá.
-        \item Laço interno passa a percorrer \texttt{B} e \texttt{C} com \textbf{stride 1}: vetorização efetiva + prefetch sequencial + linha de cache usada por inteiro.
-        \item Soma na mesma ordem de $k$ $\rightarrow$ resultado \textbf{bit a bit idêntico} ao da v0.
+        \item Laço interno percorre \texttt{B} e \texttt{C} com \textbf{stride 1}: vetorização efetiva, prefetch sequencial, linha de cache usada por inteiro;
+        \item soma na mesma ordem de $k$ $\rightarrow$ resultado \textbf{bit a bit idêntico} ao da v0;
+        \item combina H3 com o paralelismo da v2.
       \end{itemize}
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- 8. resultados tabela
+% ---------------------------------------------------------------- 8. resultados
 \begin{frame}{Resultados (hype, $N=1024$, mediana de 5 repetições)}
   \begin{table}
     \centering
@@ -193,34 +176,27 @@ for (i = 0; i < n; i++) \{
       \toprule
       Versão & Configuração & Tempo & Speedup & GFLOP/s & Efic.\\
       \midrule
-      v0 & sequencial            & 2,298 s & 1,00$\times$ & 0,94 & --- \\
-      v1 & \texttt{omp simd}, sequencial & 2,388 s & \textbf{0,96$\times$} & 0,90 & --- \\
-      v3 & paralelo interno, 20 threads & 10,193 s & \textbf{0,23$\times$} & 0,21 & 1\% \\
-      v2 & paralelo externo, 20 threads & 0,132 s & 17,47$\times$ & 16,3 & 87\% \\
-      v4 & i-k-j + paralelo, 20 threads & \textbf{0,017 s} & \textbf{132$\times$} & \textbf{123,5} & 83\% \\
+      v0 & sequencial                    & 2,298 s  & 1,00$\times$          & 0,94 & --- \\
+      v1 & \texttt{omp simd}, sequencial & 2,388 s  & \textbf{0,96$\times$} & 0,90 & --- \\
+      v3 & paralelo interno, 20 threads  & 10,193 s & \alert{\textbf{0,23$\times$}} & 0,21 & 1\% \\
+      v2 & paralelo externo, 20 threads  & 0,132 s  & 17,47$\times$         & 16,3 & 87\% \\
+      v4 & i-k-j + paralelo, 20 threads  & \textbf{0,017 s} & \textbf{132$\times$} & \textbf{123,5} & 83\% \\
       \bottomrule
     \end{tabular}
   \end{table}
   \begin{itemize}
-    \item Validação: diferença máxima \textbf{zero} vs. v0 nas 4 versões.
-    \item Eficiência paralela $=$ speedup$(p)/p$, relativa à mesma versão com 1 thread.
+    \item Extra com Hyper-Threading (40 threads): v2 $+4\%$; v4 $+38\%$ (HT esconde latência de memória).
     \item Uma otimização \alert{piorou 4,4$\times$} --- discutida, não escondida.
   \end{itemize}
 \end{frame}
 
-% ---------------------------------------------------------------- 9. grafico tempo
-\begin{frame}{Tempo por versão}
-  \centering
-  \includegraphics[height=0.78\textheight]{../results-hype/tempo_por_versao.png}
-\end{frame}
-
-% ---------------------------------------------------------------- 10. grafico speedup
+% ---------------------------------------------------------------- 9. grafico speedup
 \begin{frame}{Speedup por versão}
   \centering
   \includegraphics[height=0.78\textheight]{../results-hype/speedup_por_versao.png}
 \end{frame}
 
-% ---------------------------------------------------------------- 11. escalabilidade
+% ---------------------------------------------------------------- 10. escalabilidade
 \begin{frame}{Escalabilidade da v2: o gráfico que explica o resultado}
   \begin{columns}[T]
     \column{0.5\textwidth}
@@ -232,78 +208,33 @@ for (i = 0; i < n; i++) \{
   \end{columns}
   \vfill
   \centering
-  Escalonamento quase linear até 20 threads (99\% $\rightarrow$ 87\%); a queda gradual acompanha a fronteira NUMA (threads $> 10$ ocupam o segundo socket).
+  Quase linear até 20 threads (99\% $\rightarrow$ 87\%); a queda gradual acompanha a fronteira NUMA.
 \end{frame}
 
-% ---------------------------------------------------------------- 12. HT
-\begin{frame}{Extra: Hyper-Threading (40 threads, \texttt{OMP\_PLACES=threads})}
-  \begin{table}
-    \centering
-    \begin{tabular}{lrrr}
-      \toprule
-      Versão & 20 threads (cores) & 40 threads (HT) & Ganho do HT\\
-      \midrule
-      v2 & 0,132 s & 0,126 s & $+4\%$ \\
-      v4 & 0,0174 s & 0,0126 s & \textbf{$+38\%$} \\
-      \bottomrule
-    \end{tabular}
-  \end{table}
-  \begin{itemize}
-    \item Na v2 (latência de memória por acesso strided) o segundo thread por core quase não encontra recursos ociosos para usar.
-    \item Na v4 (vetorizada, limitada por banda/latência com acesso sequencial) o HT \textbf{esconde latência} e rende $+38\%$.
-    \item Mesma técnica de hardware, ganho dependente do gargalo do código --- coerente com a tese do trabalho.
-  \end{itemize}
-\end{frame}
-
-% ---------------------------------------------------------------- 13. discussao
+% ---------------------------------------------------------------- 11. discussao
 \begin{frame}{Discussão: por que cada resultado aconteceu}
   \begin{itemize}
-    \item \textbf{v1 (0,96$\times$):} SIMD multiplica cômputo, mas o tempo é gasto esperando memória; vetorizar sem mudar o padrão de acesso não altera o tráfego. \emph{Uma técnica só é boa otimização quando resolve o gargalo dominante.}
-    \item \textbf{v3 (0,23$\times$):} $10^6$ regiões paralelas $\Rightarrow$ overhead de fork/join + reduction + barreiras \textbf{atravessando 2 sockets NUMA} custa mais que todo o trabalho útil. Granularidade fina destrói o ganho do paralelismo.
-    \item \textbf{v2 (17,5$\times$, 87\%):} granularidade grossa escala quase linearmente; a queda suave de eficiência coincide com a ocupação do segundo socket (acessos remotos NUMA).
-    \item \textbf{v4 (132$\times$):} o par v1/v4 fecha a prova --- as mesmas unidades SIMD rendem 0,96$\times$ com stride e 7,9$\times$ sequencial (1 thread) quando o acesso é corrigido; com 20 threads, 123,5 GFLOP/s ($\approx$ 17\% do pico).
+    \item \textbf{v1 (0,96$\times$):} SIMD multiplica cômputo, mas o tempo é gasto esperando memória. \emph{Uma técnica só é boa otimização quando resolve o gargalo dominante.}
+    \item \textbf{v3 (0,23$\times$):} $10^6$ regiões paralelas $\Rightarrow$ fork/join + barreiras \textbf{atravessando 2 sockets NUMA} custam mais que o trabalho útil.
+    \item \textbf{v2 (17,5$\times$, 87\%):} granularidade grossa escala quase linear; a eficiência cai suavemente ao ocupar o segundo socket (acessos NUMA remotos).
+    \item \textbf{v4 (132$\times$):} o par v1/v4 fecha a prova --- as mesmas unidades SIMD rendem 0,96$\times$ com stride e 7,9$\times$ (1 thread) com acesso corrigido; com 20 threads, 123,5 GFLOP/s.
   \end{itemize}
 \end{frame}
 
-% ---------------------------------------------------------------- 14. limitacoes
-\begin{frame}{Limitações}
-  \begin{itemize}
-    \item Sem contadores de hardware (\texttt{perf}) no ambiente: o diagnóstico usa métricas derivadas (GFLOP/s, eficiência, escalabilidade) e análise do padrão de acesso.
-    \item Matrizes inicializadas pela thread 0 (first-touch no socket 0): com $>10$ threads parte dos acessos é remota; afeta todas as versões igualmente, mas limita o teto de escalabilidade.
-    \item A v4 usa $\approx$ 17\% do pico do nó: os próximos passos seriam tiling/blocking para registradores e L1, e $N$ maiores que estourem a L3.
-    \item Tempos da v4 com 20 threads ($\approx$ 17 ms) são curtos; $N$ maior daria mais folga entre sinal e ruído.
-  \end{itemize}
-\end{frame}
-
-% ---------------------------------------------------------------- 15. conclusao
+% ---------------------------------------------------------------- 12. conclusao
 \begin{frame}{Conclusão}
   \begin{block}{Melhor configuração}
-    \textbf{v4} --- troca de laços i-k-j + \texttt{omp parallel for schedule(static)}, 20 threads fixadas nos cores físicos: \textbf{0,017 s, speedup de 132$\times$} sobre o baseline, com resultado bit a bit idêntico.
+    \textbf{v4} --- i-k-j + \texttt{omp parallel for}, 20 threads: \textbf{0,017 s, 132$\times$} sobre o baseline, resultado bit a bit idêntico.
   \end{block}
   \begin{block}{Principal aprendizado técnico}
-    \textbf{O valor de uma técnica depende do gargalo, não da técnica.} Sobre o mesmo kernel, construções OpenMP produziram 0,96$\times$ (SIMD sem mudar o tráfego), 0,23$\times$ (paralelismo com granularidade fina em 2 sockets), 17,5$\times$ (granularidade grossa) e 132$\times$ (paralelismo + correção do padrão de acesso apontado pelo diagnóstico).
+    \textbf{O valor de uma técnica depende do gargalo, não da técnica}: 0,96$\times$, 0,23$\times$, 17,5$\times$ e 132$\times$ --- todas construções OpenMP sobre o mesmo kernel.
   \end{block}
   \begin{itemize}
-    \item Medição controlada (warm-up, mediana, pinning, governor, validação) foi o que permitiu distinguir e explicar os quatro desfechos.
+    \item Limitações: sem contadores de hardware no ambiente; first-touch NUMA limita o teto; v4 usa $\approx$ 17\% do pico (próximo passo: tiling).
   \end{itemize}
-\end{frame}
-
-% ---------------------------------------------------------------- 16. reproducao
-\begin{frame}[fragile]{Reprodução}
-  \begin{itemize}
-    \item Código, job SLURM, dados brutos e gráficos: \texttt{github.com/Spolavore/hpc-final}
-  \end{itemize}
-\begin{semiverbatim}\small
-# no front-end do PCAD
-curl -O https://raw.githubusercontent.com/Spolavore/\\
-     hpc-final/main/bench/pcad/hype.slurm
-sbatch hype.slurm     # resultados em ~/resultados-hpc-final/<jobid>/
-
-# na maquina local
-python3 analysis/plot.py results-hype/raw.csv
-\end{semiverbatim}
   \vfill
-  \footnotesize Some experiments in this work used the PCAD infrastructure, \texttt{http://pcad.inf.ufrgs.br}, at INF/UFRGS.
+  \footnotesize Código, job SLURM, dados e gráficos: \texttt{github.com/Spolavore/hpc-final} \\
+  Some experiments in this work used the PCAD infrastructure, \texttt{http://pcad.inf.ufrgs.br}, at INF/UFRGS.
 \end{frame}
 
 \end{document}
