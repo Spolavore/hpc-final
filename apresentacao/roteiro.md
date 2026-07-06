@@ -232,15 +232,19 @@ técnica; foi o gargalo que ela resolve."
 
 ---
 
-## Slide 12 — Conclusão (0:40)
+## Slide 12 — Agradecimento (0:40)
 
-**O que dizer:** "Melhor configuração: v4 com 20 threads — 17 milissegundos,
-132 vezes o baseline, resultado idêntico. O aprendizado que levo: o valor de
-uma técnica depende do gargalo, não da técnica — quatro construções OpenMP
-sobre o mesmo kernel deram de 0,23x a 132x. E nada disso seria explicável sem
-medição controlada: warm-up, mediana, threads fixas, frequência travada e
-validação de corretude. O código, o job SLURM e os dados brutos estão todos no
-repositório, reproduzíveis com dois comandos. Obrigado!"
+O slide mostra só "Obrigado" — a conclusão é falada por cima dele (a rubrica
+cobra conclusão, então não pule esta fala).
+
+**O que dizer:** "Concluindo: a melhor configuração foi a v4 com 20 threads —
+17 milissegundos, 132 vezes o baseline, com resultado idêntico ao original. O
+aprendizado que levo: o valor de uma técnica depende do gargalo, não da
+técnica — quatro construções OpenMP sobre o mesmo kernel deram de 0,23x a
+132x. E nada disso seria explicável sem medição controlada: warm-up, mediana,
+threads fixas, frequência travada e validação de corretude. O código, o job
+SLURM e os dados brutos estão no repositório do GitHub, reproduzíveis com dois
+comandos. Obrigado!"
 
 ---
 

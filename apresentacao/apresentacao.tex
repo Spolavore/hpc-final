@@ -219,19 +219,10 @@ for (i = 0; i < n; i++) \{
   \end{itemize}
 \end{frame}
 
-% ---------------------------------------------------------------- 12. conclusao
-\begin{frame}{Conclusão}
-  \begin{block}{Melhor configuração}
-    \textbf{v4} --- i-k-j + \texttt{omp parallel for}, 20 threads: \textbf{0,017 s, 132$\times$} sobre o baseline, resultado bit a bit idêntico.
-  \end{block}
-  \begin{block}{Principal aprendizado técnico}
-    \textbf{O valor de uma técnica depende do gargalo, não da técnica}: 0,96$\times$, 0,23$\times$, 17,5$\times$ e 132$\times$ --- todas construções OpenMP sobre o mesmo kernel.
-  \end{block}
-  \begin{itemize}
-    \item Limitações: sem contadores de hardware no ambiente; first-touch NUMA limita o teto; v4 usa $\approx$ 17\% do pico (próximo passo: tiling).
-  \end{itemize}
-  \vfill
-  \footnotesize Código, job SLURM, dados e gráficos: \texttt{github.com/Spolavore/hpc-final}
+% ---------------------------------------------------------------- 12. agradecimento
+\begin{frame}
+  \centering
+  {\Huge Obrigado}
 \end{frame}
 
 \end{document}
