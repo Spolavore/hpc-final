@@ -1,0 +1,5 @@
+== validacao de corretude ==
+validacao v1 N=1024 threads=1: max_abs_diff=0.000e+00 max_rel_diff=0.000e+00 -> OK
+validacao v2 N=1024 threads=20: max_abs_diff=0.000e+00 max_rel_diff=0.000e+00 -> OK
+validacao v3 N=1024 threads=20: max_abs_diff=0.000e+00 max_rel_diff=0.000e+00 -> OK
+validacao v4 N=1024 threads=20: max_abs_diff=0.000e+00 max_rel_diff=0.000e+00 -> OK
