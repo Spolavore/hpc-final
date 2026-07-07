@@ -47,8 +47,11 @@ SLURM e governor de frequência fixo em performance para a medição ser estáve
 **O que dizer:** "A versão inicial, v0, é o algoritmo clássico de três laços:
 para cada linha i e coluna j, o laço interno k percorre a linha de A e a
 coluna de B multiplicando e somando. Mediu 2,3 segundos. Sobre a metodologia:
-cada configuração roda uma vez de aquecimento que eu descarto, e depois 5
-vezes medidas — reporto a mediana, e o desvio ficou abaixo de 1%. As threads
+não usei nenhum profiler — o tempo é medido pelo relógio do próprio OpenMP, o
+omp_get_wtime, em volta do kernel, então não há overhead de instrumentação
+contaminando os números. Cada configuração roda uma vez de aquecimento que eu
+descarto, e depois 5 vezes medidas — reporto a mediana, e o desvio ficou
+abaixo de 1%. As threads
 ficam presas nos cores físicos para não migrarem no meio da medição. E o ponto
 mais importante: toda versão otimizada é validada elemento por elemento contra
 a v0, e as 4 versões deram diferença zero — otimização que dá resultado errado
