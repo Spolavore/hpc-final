@@ -268,6 +268,17 @@ o laço da v1 — 32 bytes = 4 doubles. (No relatório do trabalho, na máquina
 local com AVX-512, o mesmo laço vetoriza com 64 bytes = 8 doubles — a largura
 depende do hardware, não da diretiva.)
 
+**"A v4 não tem `omp simd` — de onde vem a vetorização dela?"**
+Da auto-vetorização do compilador: com `-O3`, o gcc vetoriza sozinho laços
+seguros e lucrativos. Na v1 o pragma era necessário porque vetorizar uma soma
+acumulada exige reordenar parcelas de ponto flutuante, e o gcc não faz isso
+sem autorização explícita (`reduction`). Na v4 o laço interno não tem
+acumulador — cada iteração escreve num elemento diferente de C — então nada
+precisa ser reordenado e o compilador vetoriza por conta própria. Confirmado
+com `-fopt-info-vec`: "loop vectorized using 32 byte vectors" no laço da v4.
+Isso reforça a tese: o bloqueio nunca foi falta de diretiva, era o layout do
+acesso.
+
 **"Por que a v4 dá resultado bit a bit idêntico se mudou a ordem dos laços?"**
 Porque para cada célula C[i][j] as parcelas continuam sendo somadas na mesma
 ordem crescente de k — o que muda é a intercalação entre células diferentes,
