@@ -190,7 +190,7 @@ for (i = 0; i < n; i++) \{
       \begin{itemize}
         \item Laço interno percorre \texttt{B} e \texttt{C} com \textbf{stride 1}: vetorização efetiva, prefetch sequencial, linha de cache usada por inteiro;
         \item soma na mesma ordem de $k$ $\rightarrow$ resultado \textbf{bit a bit idêntico} ao da v0;
-        \item combina H3 com o paralelismo da v2.
+        \item combina a correção do padrão de acesso com o paralelismo da v2.
       \end{itemize}
   \end{columns}
 \end{frame}
