@@ -117,18 +117,17 @@ disciplina: uma técnica só é boa otimização se resolve o gargalo dominante.
 
 ---
 
-## Slide 6 — v2 e v3: granularidade (1:15)
+## Slide 6 — v2 e v3: granularidade (0:50)
 
 **O que dizer:** "As versões 2 e 3 usam a MESMA técnica — `parallel for` — em
-laços diferentes, e os resultados são opostos. A v2 paraleliza o laço externo:
-o trabalho é dividido uma única vez, cada uma das 20 threads pega um bloco de
-~51 linhas da matriz e trabalha independente, sem sincronizar com ninguém.
-Resultado: 17,5x. A v3 paraleliza o laço interno: as threads são coordenadas
-de novo a cada célula da matriz — 1 milhão de vezes — e a cada vez precisam
-combinar as somas parciais e esperar todas na barreira, que aqui atravessa os
-2 sockets. Resultado: 4 vezes MAIS LENTO que o sequencial. Granularidade:
-dividir trabalho em pedaços grandes e independentes escala; em pedaços
-minúsculos e sincronizados, o custo de coordenação supera o trabalho útil."
+laços diferentes. A v2 paraleliza o laço externo: o trabalho é dividido uma
+única vez, cada uma das 20 threads pega um bloco de ~51 linhas da matriz e
+trabalha independente, sem sincronizar com ninguém. A v3 paraleliza o laço
+interno: as threads são coordenadas de novo a cada célula da matriz — 1
+milhão de vezes — e a cada vez precisam combinar as somas parciais e esperar
+todas na barreira, que aqui atravessa os 2 sockets. Mesma diretiva, mesmos 20
+cores... e os resultados não poderiam ser mais opostos." *(transição para o
+próximo slide)*
 
 **Para você entender:**
 - *`#pragma omp parallel for`*: divide as iterações do laço seguinte entre as
@@ -145,7 +144,17 @@ minúsculos e sincronizados, o custo de coordenação supera o trabalho útil."
 
 ---
 
-## Slide 7 — v4: troca de laços (1:00)
+## Slide 7 — v2 e v3: resultados (0:30)
+
+**O que dizer:** "A v2 fez o serviço em 0,13 segundo — 17 vezes e meia mais
+rápido. A v3, com os MESMOS 20 cores, levou 10 segundos: 4 vezes MAIS LENTA
+que rodar com uma única thread. É a lição de granularidade: pedaços grandes e
+independentes escalam; pedaços minúsculos e sincronizados fazem o custo de
+coordenação superar o próprio trabalho útil."
+
+---
+
+## Slide 8 — v4: troca de laços (1:00)
 
 **O que dizer:** "A v4 ataca a causa raiz do diagnóstico. Troquei a ordem dos
 laços de i-j-k para i-k-j: matematicamente calcula a mesma coisa, mas agora o
@@ -169,7 +178,7 @@ bit idêntico ao da v0. Combinada com o paralelismo da v2, é a versão final."
 
 ---
 
-## Slide 8 — Tabela de resultados (0:50)
+## Slide 9 — Tabela de resultados (0:50)
 
 **O que dizer:** "Resumo dos números: v1 empatou (0,96x), v3 piorou 4,4 vezes,
 v2 deu 17,5x com 87% de eficiência, e a v4 deu 132 vezes — de 2,3 segundos
@@ -189,7 +198,7 @@ pede."
 
 ---
 
-## Slide 9 — Gráfico de speedup (0:30, rápido)
+## Slide 10 — Gráfico de speedup (0:30, rápido)
 
 **O que dizer:** "Visualmente: as três primeiras barras ficam no chão — o
 empate da v1 e a piora da v3 — a v2 dá o salto do paralelismo, e a v4 mostra o
@@ -199,7 +208,7 @@ mais que os 20 cores."
 
 ---
 
-## Slide 10 — Escalabilidade e eficiência (1:00)
+## Slide 11 — Escalabilidade e eficiência (1:00)
 
 **O que dizer:** "Esse é o gráfico que explica o resultado da v2, não só
 mostra que melhorou. À esquerda, o speedup medido contra a linha ideal
@@ -219,7 +228,7 @@ igualmente."
 
 ---
 
-## Slide 11 — Discussão (1:00)
+## Slide 12 — Discussão (1:00)
 
 **O que dizer:** "Amarrando os quatro desfechos: a v1 não ganhou porque
 vetorizar multiplica conta e o gargalo era memória. A v3 piorou porque um
@@ -232,7 +241,7 @@ técnica; foi o gargalo que ela resolve."
 
 ---
 
-## Slide 12 — Agradecimento (0:40)
+## Slide 13 — Agradecimento (0:40)
 
 O slide mostra só "Obrigado" — a conclusão é falada por cima dele (a rubrica
 cobra conclusão, então não pule esta fala).
@@ -307,9 +316,9 @@ matrizes. Usar vários nós exigiria MPI (memória distribuída), outro paradigm
 
 # Dicas de apresentação
 
-- Total: ~9min30. Se estourar, corte primeiro o slide 9 (o gráfico fala por
+- Total: ~9min30. Se estourar, corte primeiro o slide 10 (o gráfico fala por
   si) e encurte o slide 2.
-- Os slides 4 (diagnóstico) e 11 (discussão) são onde a rubrica pesa
+- Os slides 4 (diagnóstico) e 12 (discussão) são onde a rubrica pesa
   (20% + 10%) — não os apresse.
 - Se travar em algum número: os quatro que importam são **0,96x / 0,23x /
   17,5x / 132x** — a história inteira está neles.
