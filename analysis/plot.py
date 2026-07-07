@@ -101,7 +101,7 @@ def bar_chart(out, title, subtitle, labels, values, val_labels,
         ax.axhline(ref_line, color=MUTED, linewidth=1.2,
                    linestyle=(0, (4, 3)), zorder=2)
     ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_xticklabels(labels, fontsize=9 if len(labels) <= 5 else 8)
     ax.set_ylabel(ylabel, fontsize=10, color=INK2)
     titles(fig, title, subtitle)
     fig.savefig(out, facecolor=SURFACE)
@@ -119,16 +119,26 @@ def main():
     pmax = {v: max(p for (vv, p) in t if vv == v)
             for v in {vv for (vv, _) in t}}
 
-    label_of = {
-        "v0": "v0\nbaseline ijk\nsequencial",
-        "v1": "v1\n+ omp simd\n(laço interno)",
-        "v3": f"v3\nparallel for interno\n{pmax.get('v3', 0)} threads",
-        "v2": f"v2\nparallel for externo\n{pmax.get('v2', 0)} threads",
-        "v4": f"v4\nikj + parallel for\n{pmax.get('v4', 0)} threads",
-    }
+    def label_of(v, p):
+        return {
+            "v0": "v0\nbaseline ijk\nsequencial",
+            "v1": "v1\n+ omp simd\n(laço interno)",
+            "v3": f"v3\nparalelo interno\n{p} threads",
+            "v2": f"v2\nparalelo externo\n{p} threads",
+            "v4": ("v4\ntroca de laços\n1 thread" if p == 1
+                   else f"v4\nikj + paralelo\n{p} threads"),
+        }[v]
+
     versions = [(v, 1 if v in ("v0", "v1") else pmax[v])
                 for v in ("v0", "v1", "v3", "v2", "v4") if v in pmax]
-    labels = [label_of[v] for v, _ in versions]
+    labels = [label_of(v, p) for v, p in versions]
+
+    # no grafico de speedup, a v4 com 1 thread entra como barra extra
+    # (isola o efeito da troca de lacos sem paralelismo)
+    versions_sp = list(versions)
+    if ("v4", 1) in t and pmax.get("v4", 1) != 1:
+        versions_sp.insert(-1, ("v4", 1))
+    labels_sp = [label_of(v, p) for v, p in versions_sp]
 
     # 1. tempo por versao
     times = [t[k] for k in versions]
@@ -142,12 +152,12 @@ def main():
     )
 
     # 2. speedup por versao
-    sp = [base / t[k] for k in versions]
+    sp = [base / t[k] for k in versions_sp]
     bar_chart(
         outdir / "speedup_por_versao.png",
         "Speedup por versão (vs. baseline v0)",
         f"Matmul N={n} — maior é melhor; linha tracejada marca o baseline (1×)",
-        labels, sp,
+        labels_sp, sp,
         [fmt(v, 0 if v >= 100 else (1 if v >= 10 else 2), "×") for v in sp],
         "Speedup", max(sp) * 1.18,
         ref_line=1.0,

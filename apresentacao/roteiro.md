@@ -223,10 +223,10 @@ pede."
 ## Slide 11 — Gráfico de speedup (0:30, rápido)
 
 **O que dizer:** "Visualmente: as três primeiras barras ficam no chão — o
-empate da v1 e a piora da v3 — a v2 dá o salto do paralelismo, e a v4 mostra o
-que acontece quando o paralelismo se combina com o acesso correto à memória.
-A barra da v4 é 7 vezes e meia a da v2: consertar o padrão de acesso valeu
-mais que os 20 cores."
+empate da v1 e a piora da v3. A v2 dá o salto do paralelismo. A quinta barra
+é a v4 com UMA única thread: 7,9 vezes só com a troca de laços — um core bem
+alimentado de memória vale quase metade dos 20 cores da v2. E a última barra
+é a combinação dos dois efeitos: 132 vezes."
 
 ---
 
