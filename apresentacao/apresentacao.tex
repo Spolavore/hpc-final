@@ -109,7 +109,7 @@ for (k = 0; k < n; k++)
 \begin{frame}[fragile]{v2 e v3 --- a MESMA técnica, granularidades opostas}
   \begin{columns}[T]
     \column{0.48\textwidth}
-      \textbf{v2: laço externo (grossa) $\rightarrow$ 17,5$\times$}
+      \textbf{v2: laço externo (grossa)}
 \begin{semiverbatim}\small
 #pragma omp parallel for \\
         schedule(static)
@@ -119,8 +119,11 @@ for (i = 0; i < n; i++)
       \begin{itemize}
         \item 1 região paralela; $N/p$ linhas por thread, sem sincronização interna.
       \end{itemize}
+      \begin{block}{Resultado (20 threads)}
+        \textbf{0,132 s $\rightarrow$ 17,5$\times$}
+      \end{block}
     \column{0.48\textwidth}
-      \textbf{v3: laço interno (fina) $\rightarrow$ \alert{0,23$\times$}}
+      \textbf{v3: laço interno (fina)}
 \begin{semiverbatim}\small
 for (i ...) for (j ...) \{
 #pragma omp parallel for \\
@@ -131,7 +134,13 @@ for (i ...) for (j ...) \{
       \begin{itemize}
         \item Região paralela criada $N^2 \approx 10^6$ vezes; reduction + \textbf{barreira entre 2 sockets} a cada vez.
       \end{itemize}
+      \begin{alertblock}{Resultado (20 threads)}
+        \textbf{10,193 s $\rightarrow$ 0,23$\times$}
+      \end{alertblock}
   \end{columns}
+  \vfill
+  \centering
+  \footnotesize Baseline v0 (1 thread): 2,298 s --- com os mesmos 20 cores, a v3 ficou 4,4$\times$ mais lenta que o sequencial.
 \end{frame}
 
 % ---------------------------------------------------------------- 7. v4
