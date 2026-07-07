@@ -90,14 +90,36 @@ com uma régua (o pico) e um cronômetro (o tempo medido).
     × 8 bytes por double = 8 MiB por matriz
     × 3 matrizes (A, B, C) = 24 MiB
 
-**O pulo de 8 KiB (stride) na coluna de B:**
+**O pulo de 8 KiB (stride) na coluna de B — por que cada leitura toca uma
+linha de cache diferente:**
 
-    Para descer uma linha na matriz B, o endereço avança uma linha inteira:
-    1024 elementos × 8 bytes = 8192 bytes = 8 KiB
+A memória entrega dados em blocos de 64 bytes consecutivos (a "linha de
+cache" = 8 doubles). Pense em quarteirões de 64 bytes.
 
-    A memória entrega blocos de 64 bytes (8 doubles). Pulando 8 KiB por
-    leitura, cada acesso cai num bloco diferente e usa 1 dos 8 números
-    → 7/8 do tráfego é jogado fora.
+Andar de 1 em 1 (linha de A, caso bom):
+
+    [ a0 a1 a2 a3 a4 a5 a6 a7 ] ← 1 busca traz o bloco; as 7 leituras
+                                   seguintes saem da cache de graça
+
+Andar pela coluna de B (caso ruim): cada linha da matriz tem
+1024 × 8 bytes = 8192 bytes, então descer uma linha = avançar 8192 bytes:
+
+    lê B[0][j] → endereço X
+    lê B[1][j] → endereço X + 8192   (8192 ÷ 64 = 128 blocos adiante!)
+    lê B[2][j] → endereço X + 16384  (mais 128 blocos adiante)
+
+Dois acessos consecutivos ficam 128 quarteirões de distância — nunca caem
+no mesmo bloco. Cada leitura busca um bloco novo, e o que vem dentro dele
+são os vizinhos da MESMA LINHA (B[k][j..j+7]), que o laço não quer agora
+(ele quer B[k+1][j], 128 blocos adiante):
+
+    bloco trazido: [ B[k][j]  B[k][j+1] ... B[k][j+7] ]
+                      ↑ usa      ↑---- 7 não usados ----↑
+
+Resultado: 1 busca por operação (em vez de 1 a cada 8) + 7/8 do tráfego
+desperdiçado. É essa espera por bloco novo, a cada iteração, que deixa as
+unidades de cálculo 99,9% do tempo paradas. A v4 troca os laços para andar
+pela linha de B (de 1 em 1) e cai no caso bom.
 
 **Speedup:**
 
