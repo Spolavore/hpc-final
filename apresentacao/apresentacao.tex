@@ -79,13 +79,6 @@ for (i = 0; i < n; i++)
     \item Laço interno lê \texttt{B[k*n+j]} com \textbf{stride de 8 KiB}: cada iteração toca uma linha de cache nova e usa só 1 dos 8 doubles trazidos.
     \item Sintoma do mapa da disciplina: \emph{tempo dominado por memória / acessos com stride}.
   \end{itemize}
-  \begin{block}{Hipóteses de intervenção}
-    \begin{enumerate}
-      \item[H1.] Vetorizar o produto escalar (\texttt{omp simd}). \hfill \alert{(falsa)}
-      \item[H2.] Paralelizar o laço externo com granularidade grossa. \hfill (verdadeira)
-      \item[H3.] Trocar a ordem dos laços para eliminar o stride --- a causa raiz. \hfill (verdadeira)
-    \end{enumerate}
-  \end{block}
 \end{frame}
 
 % ---------------------------------------------------------------- 5. v1
