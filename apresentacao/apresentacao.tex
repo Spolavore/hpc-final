@@ -192,6 +192,7 @@ for (i = 0; i < n; i++) \{
       v1 & \texttt{omp simd}, sequencial & 2,388 s  & \textbf{0,96$\times$} & 0,90 & --- \\
       v3 & paralelo interno, 20 threads  & 10,193 s & \alert{\textbf{0,23$\times$}} & 0,21 & 1\% \\
       v2 & paralelo externo, 20 threads  & 0,132 s  & 17,47$\times$         & 16,3 & 87\% \\
+      v4 & i-k-j (troca de laços), 1 thread & 0,289 s & 7,9$\times$ & 7,4 & --- \\
       v4 & i-k-j + paralelo, 20 threads  & \textbf{0,017 s} & \textbf{132$\times$} & \textbf{123,5} & 83\% \\
       \bottomrule
     \end{tabular}

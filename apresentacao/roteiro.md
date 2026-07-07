@@ -181,8 +181,10 @@ bit idêntico ao da v0. Combinada com o paralelismo da v2, é a versão final."
 ## Slide 9 — Tabela de resultados (0:50)
 
 **O que dizer:** "Resumo dos números: v1 empatou (0,96x), v3 piorou 4,4 vezes,
-v2 deu 17,5x com 87% de eficiência, e a v4 deu 132 vezes — de 2,3 segundos
-para 17 milissegundos, com resultado idêntico validado. Duas observações: com
+v2 deu 17,5x com 87% de eficiência. E reparem nas duas linhas da v4: com UMA
+única thread, só de trocar a ordem dos laços, já são 7,9 vezes — maior que
+qualquer outra versão; com 20 threads, 132 vezes — de 2,3 segundos para 17
+milissegundos, com resultado idêntico validado. Duas observações: com
 Hyper-Threading, 40 threads, a v4 ganha mais 38%, porque threads extras ajudam
 a esconder latência de memória. E a v3 está aqui de propósito — uma otimização
 que piora deve ser discutida, não escondida, como o material da disciplina
