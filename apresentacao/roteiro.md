@@ -250,6 +250,15 @@ comandos. Obrigado!"
 
 # Perguntas prováveis do professor (e respostas curtas)
 
+**"De onde você tirou que o SIMD processa 4 doubles?"**
+Da ficha técnica do processador: o Haswell usa AVX2, cujos registradores têm
+256 bits. Um double ocupa 64 bits. 256 ÷ 64 = 4 doubles por instrução. E dá
+para confirmar que o compilador realmente vetorizou assim: compilando com
+`-fopt-info-vec`, o gcc reporta "loop vectorized using 32 byte vectors" para
+o laço da v1 — 32 bytes = 4 doubles. (No relatório do trabalho, na máquina
+local com AVX-512, o mesmo laço vetoriza com 64 bytes = 8 doubles — a largura
+depende do hardware, não da diretiva.)
+
 **"Por que a v4 dá resultado bit a bit idêntico se mudou a ordem dos laços?"**
 Porque para cada célula C[i][j] as parcelas continuam sendo somadas na mesma
 ordem crescente de k — o que muda é a intercalação entre células diferentes,
