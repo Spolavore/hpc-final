@@ -66,7 +66,7 @@ for (i = 0; i < n; i++)
       \begin{itemize}
         \item \textbf{sem profiler}: tempo medido com \texttt{omp\_get\_wtime()} em volta do kernel;
         \item 1 warm-up não medido + \textbf{5 repetições}; mediana $\pm$ desvio ($<1\%$);
-        \item threads fixadas nos cores físicos (\texttt{OMP\_PROC\_BIND}/\texttt{OMP\_PLACES});
+        \item threads fixadas nos cores físicos:\\ \texttt{OMP\_PROC\_BIND=close}, \texttt{OMP\_PLACES=cores};
         \item mesmas entradas em todas as versões;
         \item \textbf{validação}: comparação elemento a elemento com a v0 --- diferença \textbf{zero} nas 4 versões.
       \end{itemize}
