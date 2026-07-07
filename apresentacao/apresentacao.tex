@@ -155,6 +155,21 @@ for (i ...) for (j ...) \{
   \vfill
 \end{frame}
 
+% ---------------------------------------------------------------- 8. escalabilidade
+\begin{frame}{Escalabilidade da v2}
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{../results-hype/escalabilidade_v2.png}
+    \column{0.5\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{../results-hype/eficiencia_v2.png}
+  \end{columns}
+  \vfill
+  \centering
+  Quase linear até 20 threads (99\% $\rightarrow$ 87\%); a queda gradual acompanha a fronteira NUMA.
+\end{frame}
+
 % ---------------------------------------------------------------- 7. v4
 \begin{frame}[fragile]{v4 --- troca de laços i-k-j (ataca a causa raiz)}
   \begin{columns}[T]
@@ -205,22 +220,7 @@ for (i = 0; i < n; i++) \{
   \includegraphics[height=0.78\textheight]{../results-hype/speedup_por_versao.png}
 \end{frame}
 
-% ---------------------------------------------------------------- 10. escalabilidade
-\begin{frame}{Escalabilidade da v2: o gráfico que explica o resultado}
-  \begin{columns}[T]
-    \column{0.5\textwidth}
-      \centering
-      \includegraphics[width=\textwidth]{../results-hype/escalabilidade_v2.png}
-    \column{0.5\textwidth}
-      \centering
-      \includegraphics[width=\textwidth]{../results-hype/eficiencia_v2.png}
-  \end{columns}
-  \vfill
-  \centering
-  Quase linear até 20 threads (99\% $\rightarrow$ 87\%); a queda gradual acompanha a fronteira NUMA.
-\end{frame}
-
-% ---------------------------------------------------------------- 11. discussao
+% ---------------------------------------------------------------- 12. discussao
 \begin{frame}{Discussão: por que cada resultado aconteceu}
   \begin{itemize}
     \item \textbf{v1 (0,96$\times$):} SIMD multiplica a capacidade de cálculo, mas o tempo é gasto esperando memória. \emph{Uma técnica só é boa otimização quando resolve o gargalo dominante.}

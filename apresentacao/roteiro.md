@@ -154,7 +154,27 @@ coordenação superar o próprio trabalho útil."
 
 ---
 
-## Slide 8 — v4: troca de laços (1:00)
+## Slide 8 — Escalabilidade da v2 (1:00)
+
+**O que dizer:** "Esse é o gráfico que explica o resultado da v2, não só
+mostra que melhorou. À esquerda, o speedup medido contra a linha ideal
+conforme aumento as threads: 1, 2, 4, 8, 16, 20. Quase linear. À direita, a
+eficiência: começa em 99% e desce suavemente até 87%. Essa queda tem causa
+conhecida: a partir de 10 threads o trabalho passa a ocupar o segundo socket,
+e parte dos acessos vira acesso remoto NUMA — as matrizes foram criadas na
+memória do socket 0. É uma limitação mapeada, que afeta todas as versões
+igualmente."
+
+**Para você entender:**
+- *Linha ideal*: speedup = nº de threads (20 threads → 20x). Nunca se atinge
+  na prática; a distância até ela mostra o custo real do paralelismo.
+- *First-touch*: o Linux coloca cada página de memória perto de quem a tocou
+  primeiro. Como a thread 0 inicializa as matrizes, tudo nasce no socket 0; as
+  threads do socket 1 pagam acesso remoto.
+
+---
+
+## Slide 9 — v4: troca de laços (1:00)
 
 **O que dizer:** "A v4 ataca a causa raiz do diagnóstico. Troquei a ordem dos
 laços de i-j-k para i-k-j: matematicamente calcula a mesma coisa, mas agora o
@@ -178,7 +198,7 @@ bit idêntico ao da v0. Combinada com o paralelismo da v2, é a versão final."
 
 ---
 
-## Slide 9 — Tabela de resultados (0:50)
+## Slide 10 — Tabela de resultados (0:50)
 
 **O que dizer:** "Resumo dos números: v1 empatou (0,96x), v3 piorou 4,4 vezes,
 v2 deu 17,5x com 87% de eficiência. E reparem nas duas linhas da v4: com UMA
@@ -200,33 +220,13 @@ pede."
 
 ---
 
-## Slide 10 — Gráfico de speedup (0:30, rápido)
+## Slide 11 — Gráfico de speedup (0:30, rápido)
 
 **O que dizer:** "Visualmente: as três primeiras barras ficam no chão — o
 empate da v1 e a piora da v3 — a v2 dá o salto do paralelismo, e a v4 mostra o
 que acontece quando o paralelismo se combina com o acesso correto à memória.
 A barra da v4 é 7 vezes e meia a da v2: consertar o padrão de acesso valeu
 mais que os 20 cores."
-
----
-
-## Slide 11 — Escalabilidade e eficiência (1:00)
-
-**O que dizer:** "Esse é o gráfico que explica o resultado da v2, não só
-mostra que melhorou. À esquerda, o speedup medido contra a linha ideal
-conforme aumento as threads: 1, 2, 4, 8, 16, 20. Quase linear. À direita, a
-eficiência: começa em 99% e desce suavemente até 87%. Essa queda tem causa
-conhecida: a partir de 10 threads o trabalho passa a ocupar o segundo socket,
-e parte dos acessos vira acesso remoto NUMA — as matrizes foram criadas na
-memória do socket 0. É uma limitação mapeada, que afeta todas as versões
-igualmente."
-
-**Para você entender:**
-- *Linha ideal*: speedup = nº de threads (20 threads → 20x). Nunca se atinge
-  na prática; a distância até ela mostra o custo real do paralelismo.
-- *First-touch*: o Linux coloca cada página de memória perto de quem a tocou
-  primeiro. Como a thread 0 inicializa as matrizes, tudo nasce no socket 0; as
-  threads do socket 1 pagam acesso remoto.
 
 ---
 
@@ -329,7 +329,7 @@ matrizes. Usar vários nós exigiria MPI (memória distribuída), outro paradigm
 
 # Dicas de apresentação
 
-- Total: ~9min30. Se estourar, corte primeiro o slide 10 (o gráfico fala por
+- Total: ~9min30. Se estourar, corte primeiro o slide 11 (o gráfico fala por
   si) e encurte o slide 2.
 - Os slides 4 (diagnóstico) e 12 (discussão) são onde a rubrica pesa
   (20% + 10%) — não os apresse.
